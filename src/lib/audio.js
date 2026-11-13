@@ -1,5 +1,5 @@
 // The pond's soundtrack, built with the Web Audio API. No audio files: every sound is made in code.
-// The style is slow, sparse piano over soft strings, in the spirit of calm sandbox-game music.
+// The style is slow, sparse piano with a long echo, in the spirit of calm sandbox-game music.
 // Every part follows a reading from the pond.
 //
 //   SOUND               READING              HOW
@@ -60,19 +60,6 @@ export function createAudio(getFrame) {
     const pianoTone = ctx.createBiquadFilter(); pianoTone.type = 'lowpass'; pianoTone.frequency.value = 2400; pianoTone.Q.value = 0.3;
     pianoTone.connect(bus);
 
-    // Strings: a quiet held chord under the piano, with a slow swell.
-    const padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 600; padFilter.Q.value = 0.4;
-    const padGain = ctx.createGain(); padGain.gain.value = 0; padFilter.connect(padGain); padGain.connect(bus);
-    const swell = ctx.createOscillator(); swell.frequency.value = 0.06;
-    const swellDepth = ctx.createGain(); swellDepth.gain.value = 140;
-    swell.connect(swellDepth); swellDepth.connect(padFilter.frequency); swell.start();
-    const pad = [0, 7, 14, 16].map((interval, k) => { // root, fifth, ninth, third: an open, hopeful chord
-      const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.value = 220; osc.detune.value = (k - 1.5) * 7;
-      const g = ctx.createGain(); g.gain.value = [0.16, 0.12, 0.08, 0.08][k];
-      osc.connect(g); g.connect(padFilter); osc.start();
-      return { osc, interval };
-    });
-
     // Noise layers. Each one swells slowly so it sounds like water and air, not static.
     const noise = noiseBuffer(ctx);
     const layer = (freq, q, swellHz) => {
@@ -86,7 +73,7 @@ export function createAudio(getFrame) {
       src.connect(filter); filter.connect(level); level.connect(gain); gain.connect(bus); src.start();
       return { filter, gain };
     };
-    n = { master, bus, pianoTone, padFilter, padGain, pad, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
+    n = { master, bus, pianoTone, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
 
     update(0.05);
     setInterval(tick, STEP_MS);
@@ -112,7 +99,7 @@ export function createAudio(getFrame) {
     });
   }
 
-  /** Point the continuous sounds (strings, wash, hiss, piano tone) at the current readings. */
+  /** Point the continuous sounds (wash, hiss, piano tone) at the current readings. */
   function update(glide = 1.5) {
     const f = getFrame();
     if (!f) return null;
@@ -122,9 +109,6 @@ export function createAudio(getFrame) {
 
     // Temperature picks the key: 1°C sits around A, 25°C is seven semitones higher.
     const key = Math.round(45 + clamp(((f.temp ?? 12) - 1) / 24, 0, 1) * 7);
-    n.pad.forEach(({ osc, interval }) => osc.frequency.setTargetAtTime(midi(key + 12 + interval), now, glide));
-    n.padGain.gain.setTargetAtTime(0.18 + 0.3 * oxy, now, glide);
-    n.padFilter.frequency.setTargetAtTime(380 + 900 * oxy, now, glide);
     n.pianoTone.frequency.setTargetAtTime(700 + 3200 * oxy, now, glide);
 
     n.wash.gain.gain.setTargetAtTime(0.02 + murk * 0.2, now, glide);

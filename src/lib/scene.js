@@ -46,7 +46,7 @@ export function createScene(canvas) {
 
   // A turtle seen from the side. mode: 'bask' (on the log), 'swim', or 'rest' (tucked in, cold).
   function drawTurtle(px, py, s, dir, mode, phase, shell, skin, alpha) {
-    const paddle = mode === 'swim' ? Math.sin(T * 2.2 + phase) * 0.5 : 0;
+    const paddle = mode === 'swim' ? Math.sin(T * 1.2 + phase) * 0.5 : 0;
     const out = mode === 'rest' ? 0.3 : 1; // how far head and legs stick out
     g.save(); g.translate(px, py); g.scale(dir, 1); g.globalAlpha = alpha;
     g.fillStyle = rgb(skin);
@@ -193,7 +193,7 @@ export function createScene(canvas) {
       } else if (turtleMode === 'rest') {
         ty = 0.5 + t.slot * 0.07;
       } else {
-        t.x += t.dir * 0.012 * dt * (0.5 + tN);
+        t.x += t.dir * 0.006 * dt * (0.5 + tN);
         if (t.x > 0.9) t.dir = -1;
         if (t.x < 0.1) t.dir = 1;
         ty = 0.2 + t.slot * 0.13 + Math.sin(T * 0.25 + t.phase) * 0.04;
@@ -213,9 +213,9 @@ export function createScene(canvas) {
       if (shelter) {
         const tx = 0.13 + i * 0.055;
         moving = Math.abs(tx - gz.x) > 0.01;
-        if (moving) { gz.dir = tx < gz.x ? -1 : 1; gz.x += gz.dir * 0.03 * dt; }
+        if (moving) { gz.dir = tx < gz.x ? -1 : 1; gz.x += gz.dir * 0.018 * dt; }
       } else {
-        gz.x += gz.dir * 0.012 * dt * (0.5 + 0.5 * Math.sin(T * 0.3 + gz.phase) ** 2);
+        gz.x += gz.dir * 0.006 * dt * (0.5 + 0.5 * Math.sin(T * 0.3 + gz.phase) ** 2);
         if (gz.x > 0.56) gz.dir = -1;
         if (gz.x < 0.14) gz.dir = 1;
       }
@@ -245,7 +245,7 @@ export function createScene(canvas) {
     const energy = clamp(doN, 0.12, 1);
     const gasping = (f.doPct ?? 90) < 40;
     for (const fi of fish) {
-      fi.x += fi.vx * energy * dt * (gasping ? 0.3 : 1.6);
+      fi.x += fi.vx * energy * dt * (gasping ? 0.2 : 0.75);
       if (fi.x > 1.08) fi.x = -0.08;
       if (fi.x < -0.08) fi.x = 1.08;
       const targetY = gasping ? 0.12 + (fi.row % 3) * 0.02 : 0.28 + ((fi.row * 0.137) % 0.55);
@@ -253,7 +253,7 @@ export function createScene(canvas) {
       const bob = Math.sin(T * (gasping ? 3 : 1.4) + fi.phase) * (gasping ? 0.006 : 0.012);
       const px = fi.x * W, py = horizon + (H - horizon) * (fi.y + bob);
       const s = H * 0.028 * fi.size, dir = fi.vx > 0 ? 1 : -1;
-      const tail = Math.sin(T * (4 + energy * 7) + fi.phase) * 0.45;
+      const tail = Math.sin(T * (2.5 + energy * 3.5) + fi.phase) * 0.45;
       const body = mix(mix([255, 140, 60], [255, 200, 120], fi.tint), water, 0.08 + (1 - energy) * 0.45);
       g.save(); g.translate(px, py); g.scale(dir, 1); g.globalAlpha = 0.95 - turbN * 0.45;
       g.fillStyle = rgb(body);
@@ -278,8 +278,8 @@ export function createScene(canvas) {
     if (dragonflyAlpha > 0.02) {
       for (const d of dragonflies) {
         d.wait -= dt;
-        if (d.wait <= 0) { d.tx = 0.08 + Math.random() * 0.84; d.ty = Math.random(); d.wait = 0.6 + Math.random() * 1.8; }
-        d.x += (d.tx - d.x) * dt * 3; d.y += (d.ty - d.y) * dt * 3;
+        if (d.wait <= 0) { d.tx = 0.08 + Math.random() * 0.84; d.ty = Math.random(); d.wait = 1.5 + Math.random() * 3; }
+        d.x += (d.tx - d.x) * dt * 1.4; d.y += (d.ty - d.y) * dt * 1.4;
         const s = H * 0.011, flap = Math.abs(Math.sin(T * 40 + d.tx * 9));
         g.save(); g.translate(d.x * W, horizon - H * 0.1 + d.y * H * 0.1); g.scale(d.tx > d.x ? 1 : -1, 1); g.globalAlpha = dragonflyAlpha;
         g.fillStyle = 'rgba(230,245,255,.55)';
