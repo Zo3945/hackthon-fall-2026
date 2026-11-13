@@ -43,6 +43,7 @@ export function createScene(canvas) {
   const dragonflies = Array.from({ length: 3 }, () => ({ x: Math.random(), y: Math.random(), tx: Math.random(), ty: Math.random(), wait: 0 }));
   const fireflies = Array.from({ length: 16 }, () => ({ x: Math.random(), y: Math.random(), phase: Math.random() * TAU, speed: 0.5 + Math.random() }));
   let dragonflyAlpha = 0, fireflyAlpha = 0;
+  let dropDebt = 0, flash = 0, bolt = null, nextStrike = 0; // rain and lightning state
   const hits = []; // where each animal was drawn this frame, so clicks can find them
 
   // A turtle seen from the side. mode: 'bask' (on the log), 'swim', or 'rest' (tucked in, cold).
@@ -96,6 +97,7 @@ export function createScene(canvas) {
     const tN = clamp(((f.temp ?? 12) - 1) / 24, 0, 1);
     const turbN = clamp((f.turb ?? 4) / 50, 0, 1);
     const rainN = clamp(f.rain / 3, 0, 1);
+    const stormN = clamp((f.rain - 2) / 10, 0, 1); // 0 for showers, 1 for a downpour
     const doN = clamp((f.doPct ?? 90) / 100, 0, 1.4);
     const windN = f.windN;
     const sun = sunPosition(f.timeMs);
@@ -104,17 +106,17 @@ export function createScene(canvas) {
 
     // Sky
     let gr = g.createLinearGradient(0, 0, 0, horizon);
-    gr.addColorStop(0, rgb(mix([6, 12, 34], [96, 150, 205], day * (1 - rainN * 0.6))));
-    gr.addColorStop(1, rgb(mix([16, 30, 58], [196, 222, 236], day * (1 - rainN * 0.55))));
+    gr.addColorStop(0, rgb(mix([6, 12, 34], [96, 150, 205], day * (1 - rainN * 0.6 - stormN * 0.25))));
+    gr.addColorStop(1, rgb(mix([16, 30, 58], [196, 222, 236], day * (1 - rainN * 0.55 - stormN * 0.3))));
     g.fillStyle = gr; g.fillRect(0, 0, W, horizon);
 
     // Sun or moon
     const sunT = clamp(sun, 0, 1);
     if (sun > 0 && sun < 1) {
-      g.fillStyle = `rgba(255,236,170,${0.9 * (1 - rainN * 0.7)})`;
+      g.fillStyle = `rgba(255,236,170,${0.9 * (1 - rainN)})`;
       g.beginPath(); g.arc(W * (0.12 + 0.76 * sunT), horizon * (0.85 - 0.6 * Math.sin(sunT * Math.PI)), H * 0.035, 0, TAU); g.fill();
     } else {
-      g.fillStyle = 'rgba(235,240,255,.85)';
+      g.fillStyle = `rgba(235,240,255,${0.85 * (1 - rainN)})`;
       g.beginPath(); g.arc(W * 0.82, horizon * 0.3, H * 0.025, 0, TAU); g.fill();
     }
 
@@ -123,7 +125,36 @@ export function createScene(canvas) {
     g.beginPath(); g.moveTo(0, horizon);
     for (let x = 0; x <= W; x += W / 40) g.lineTo(x, horizon - H * (0.03 + 0.03 * Math.abs(Math.sin(x * 0.011) + Math.sin(x * 0.0047))));
     g.lineTo(W, horizon); g.closePath(); g.fill();
-    if (rainN > 0.02) { g.fillStyle = `rgba(60,70,90,${0.55 * rainN})`; g.fillRect(0, 0, W, horizon); }
+    if (rainN > 0.02) {
+      g.fillStyle = `rgba(60,70,90,${0.5 * rainN})`; g.fillRect(0, 0, W, horizon);
+      // Rain clouds rolling across the top, darker and lower in a downpour
+      const shade = Math.round(58 - stormN * 22);
+      g.fillStyle = `rgba(${shade - 12},${shade - 6},${shade + 6},${Math.min(0.92, 0.35 + rainN * 0.55)})`;
+      for (let i = 0; i < 9; i++) {
+        const cx = (((i * 0.137 + T * (0.004 + windN * 0.012)) % 1.3) - 0.15) * W;
+        const cy = horizon * (0.06 + (0.2 + stormN * 0.15) * ((i * 0.61) % 1));
+        g.beginPath();
+        g.ellipse(cx, cy, W * 0.2, horizon * 0.15, 0, 0, TAU);
+        g.ellipse(cx + W * 0.11, cy + horizon * 0.05, W * 0.16, horizon * 0.12, 0, 0, TAU);
+        g.fill();
+      }
+    }
+
+    // Lightning: only when the weather station counted strikes in this hour
+    flash = Math.max(0, flash - dt * 3.5);
+    if (f.lightning > 0) {
+      nextStrike -= dt;
+      if (nextStrike <= 0) {
+        flash = 1; nextStrike = 1.2 + Math.random() * 5 / Math.min(4, 1 + f.lightning / 20);
+        let x = W * (0.15 + Math.random() * 0.7), y = horizon * 0.12;
+        bolt = [[x, y]];
+        while (y < horizon * 0.95) { x += (Math.random() - 0.5) * W * 0.06; y += horizon * (0.08 + Math.random() * 0.1); bolt.push([x, y]); }
+      }
+    }
+    if (flash > 0.45 && bolt) {
+      g.strokeStyle = `rgba(255,255,235,${flash})`; g.lineWidth = 2.5 * DPR; g.lineJoin = 'round';
+      g.beginPath(); bolt.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); g.stroke();
+    }
 
     // Water: cold blue to warm green, browner when murky
     const water = mix(mix([14, 70, 120], [28, 128, 112], tN), [112, 94, 58], turbN * 0.85);
@@ -142,7 +173,7 @@ export function createScene(canvas) {
     g.globalAlpha = 1;
 
     // Waves: taller and faster with wind
-    const amp = (3 + windN * 16 + rainN * 6) * DPR;
+    const amp = (3 + windN * 16 + rainN * 6 + stormN * 10) * DPR;
     for (let L = 0; L < 4; L++) {
       g.strokeStyle = `rgba(255,255,255,${0.06 + 0.05 * (3 - L) * (0.4 + day)})`;
       g.lineWidth = 1.5 * DPR; g.beginPath();
@@ -230,11 +261,14 @@ export function createScene(canvas) {
     g.globalAlpha = 1;
 
     // Rain and the rings it leaves
-    for (let i = 0; i < rainN * 40 * dt; i++) drops.push({ x: Math.random() * W, y: -10, v: H * (0.9 + Math.random() * 0.5), end: horizon + (H - horizon) * (0.05 + Math.random() * 0.9) });
+    dropDebt += (rainN * 50 + stormN * 330) * dt; // drops per second: a shower is light, a downpour is a wall of rain
+    for (; dropDebt >= 1 && drops.length < 700; dropDebt--) drops.push({ x: Math.random() * W * 1.1, y: -10, v: H * (0.9 + Math.random() * 0.5), end: horizon + (H - horizon) * (0.05 + Math.random() * 0.9) });
+    if (dropDebt > 50) dropDebt = 0;
+    const slant = (2 + windN * 12) * DPR; // wind blows the rain sideways
     g.strokeStyle = 'rgba(200,225,255,.5)'; g.lineWidth = 1.2 * DPR;
     for (let i = drops.length - 1; i >= 0; i--) {
-      const d = drops[i]; d.y += d.v * dt;
-      g.beginPath(); g.moveTo(d.x, d.y - 16 * DPR); g.lineTo(d.x - 2, d.y); g.stroke();
+      const d = drops[i]; d.y += d.v * dt; d.x -= slant * 3 * dt;
+      g.beginPath(); g.moveTo(d.x + slant, d.y - 18 * DPR); g.lineTo(d.x, d.y); g.stroke();
       if (d.y >= d.end) { ripples.push({ x: d.x, y: d.end, r: 2, a: 0.5 }); drops.splice(i, 1); }
     }
     if (ripples.length > 220) ripples.splice(0, ripples.length - 220);
@@ -307,6 +341,9 @@ export function createScene(canvas) {
         g.fillStyle = `rgba(240,255,170,${a})`; g.beginPath(); g.arc(px, py, 2 * DPR, 0, TAU); g.fill();
       }
     }
+
+    // The whole scene lights up for an instant when lightning strikes
+    if (flash > 0) { g.fillStyle = `rgba(235,240,255,${flash * 0.32})`; g.fillRect(0, 0, W, H); }
 
     // Murk veil and vignette
     g.fillStyle = `rgba(110,92,56,${turbN * 0.28})`; g.fillRect(0, horizon, W, H - horizon);

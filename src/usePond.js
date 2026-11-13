@@ -51,10 +51,10 @@ export function usePond(canvasRef) {
 
   const setPlaying = useCallback((v) => { eng.playing = v; setPlayingState(v); }, [eng]);
 
-  const goReplay = useCallback((pos) => {
+  const goReplay = useCallback((pos, play = true) => {
     eng.series = eng.hist;
     eng.pos = clamp(pos ?? eng.stormPos, 0, eng.hist.n - 1);
-    setMode('replay'); setPlaying(true); snapshot();
+    setMode('replay'); setPlaying(play); snapshot();
   }, [eng, setPlaying, snapshot]);
 
   const goLive = useCallback(async () => {
@@ -136,7 +136,8 @@ export function usePond(canvasRef) {
     togglePlay: () => setPlaying(!eng.playing),
     cycleSpeed: () => { eng.speed = (eng.speed + 1) % SPEEDS.length; setSpeedState(eng.speed); },
     scrub: (fraction) => { eng.pos = clamp(fraction, 0, 1) * (eng.series.n - 1); snapshot(); },
-    jumpTo: (pos) => { eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); goReplay(pos); },
+    // Jumping to a moment holds it on screen. Press Play to watch what happened next.
+    jumpTo: (pos) => { eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); goReplay(pos, false); },
     toggleLive: () => (mode === 'live' ? goReplay() : goLive()),
     toggleSound: () => setSound(!sound),
     // Clicking an animal: find which one is under the pointer and let it explain itself.

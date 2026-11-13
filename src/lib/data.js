@@ -1,6 +1,7 @@
 // Pond data: loading, live fetching, and reading values at any point in time.
 
-export const COLS = ['Temp', 'DOpct', 'Turb', 'pH', 'Cond', 'Rain', 'WindSpeed', 'AirTemp'];
+export const COLS = ['Temp', 'DOpct', 'Turb', 'pH', 'Cond', 'Rain', 'WindSpeed', 'AirTemp', 'Lightning'];
+const COUNTED = ['Rain', 'Lightning']; // added up per hour, where the others are averaged
 export const HOUR = 3600000;
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -86,6 +87,7 @@ export function readFrame(series, pos, norm) {
     turb: series.val('Turb', pos),
     ph: series.val('pH', pos),
     rain: series.val('Rain', pos) ?? 0,
+    lightning: series.col('Lightning')[clamp(Math.round(pos), 0, series.n - 1)] ?? 0, // strikes counted this hour
     air: series.val('AirTemp', pos),
     wind,
     windN: n01(norm, 'WindSpeed', wind),
@@ -122,7 +124,7 @@ export async function fetchLive() {
       let b = buckets.get(h);
       if (!b) { b = {}; buckets.set(h, b); }
       for (const c of cols) {
-        const x = rec.sensors?.[c];
+        const x = rec.sensors?.[c === 'Lightning' ? 'LightningStrikes' : c];
         if (typeof x !== 'number') continue;
         const lim = LIMITS[c];
         if (lim && (x < lim[0] || x > lim[1])) continue;
@@ -131,7 +133,7 @@ export async function fetchLive() {
     }
   };
   add(water, ['Temp', 'DOpct', 'Turb', 'pH', 'Cond'], true);
-  add(weather, ['Rain', 'WindSpeed', 'AirTemp'], false);
+  add(weather, ['Rain', 'WindSpeed', 'AirTemp', 'Lightning'], false);
   if (!Number.isFinite(lo)) throw new Error('no live water data');
 
   const rows = [];
@@ -139,9 +141,9 @@ export async function fetchLive() {
     const b = buckets.get(h) || {};
     rows.push(COLS.map((c) => {
       const v = b[c];
-      if (!v?.length) return c === 'Rain' ? 0 : null;
+      if (!v?.length) return COUNTED.includes(c) ? 0 : null;
       const sum = v.reduce((a, x) => a + x, 0);
-      return c === 'Rain' ? sum : sum / v.length;
+      return COUNTED.includes(c) ? sum : sum / v.length;
     }));
   }
   return new Series({ rows, startMs: lo * HOUR, lastMs });
@@ -161,8 +163,11 @@ export function findEvents(series) {
     for (let k = 0; k < 12; k++) sum += rain[i + k] || 0;
     if (sum > stormSum) { stormSum = sum; stormAt = i; }
   }
+  // Land on the wettest hour of that storm, not the calm before it.
+  let peakAt = stormAt;
+  for (let k = 0; k < 12; k++) if ((rain[stormAt + k] || 0) > (rain[peakAt] || 0)) peakAt = stormAt + k;
   return [
-    { label: 'Biggest storm', pos: Math.max(0, stormAt - 3) },
+    { label: 'Biggest storm', pos: peakAt },
     { label: 'Warmest water', pos: best('Temp') },
     { label: 'Lowest oxygen', pos: best('DOpct', (x) => -x) },
     { label: 'Murkiest water', pos: best('Turb') },
