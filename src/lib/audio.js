@@ -1,30 +1,26 @@
-// Calm ambient soundscape, built with the Web Audio API. Every sound follows a reading.
+// The pond's soundtrack, built with the Web Audio API. No audio files: every sound is made in code.
+// The style is slow, sparse piano over soft strings, in the spirit of calm sandbox-game music.
+// Every part follows a reading from the pond.
 //
-//   SOUND            READING              HOW
-//   warm chord       water temperature    warmer water = higher chord
-//   chord brightness dissolved oxygen     more oxygen = brighter and fuller, low oxygen = dull and thin
-//   bell melody      pH                   higher pH = higher notes
-//   water wash       turbidity            murkier water = louder, lower wash
-//   airy hiss        wind                 more wind = louder, higher hiss
-//   high drips       rain                 more rain = more drips
+//   SOUND               READING              HOW
+//   key of the music    water temperature    warmer water = the whole piece sits higher
+//   how much is played  dissolved oxygen     more oxygen = fuller phrases and brighter tone,
+//                                            low oxygen = a few slow, dull notes
+//   melody height       pH                   higher pH = the piano plays higher
+//   low water wash      turbidity            murkier water = louder, deeper wash
+//   airy hiss           wind                 more wind = louder, higher hiss
+//   high piano drips    rain                 more rain = more drips
 //
 // Notes snap to a pentatonic scale so it always sounds like music, not an alarm.
 
 import { clamp, lerp } from './data.js';
 
-const PENT = [0, 2, 4, 7, 9]; // C major pentatonic: C D E G A
-const STEP_MS = 600; // one melody step
+const PENT = [0, 2, 4, 7, 9]; // major pentatonic: 1 2 3 5 6
+const STEP_MS = 850; // one slow beat
 const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
-
-/** Move a MIDI note to the nearest note of the scale. */
-function snap(m) {
-  const octave = Math.floor(m / 12), d = ((m % 12) + 12) % 12;
-  let best = PENT[0];
-  for (const p of PENT) if (Math.abs(p - d) < Math.abs(best - d)) best = p;
-  return octave * 12 + best;
-}
-/** The i-th note of the scale, counting up from C. */
+/** The i-th note of the pentatonic scale above a key note. */
 const degree = (i) => Math.floor(i / 5) * 12 + PENT[((i % 5) + 5) % 5];
+const chance = (p) => Math.random() < p;
 
 function noiseBuffer(ctx) {
   const b = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate), d = b.getChannelData(0);
@@ -32,15 +28,18 @@ function noiseBuffer(ctx) {
   for (let i = 0; i < d.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
   return b;
 }
-function reverbImpulse(ctx) {
-  const len = ctx.sampleRate * 3.2, b = ctx.createBuffer(2, len, ctx.sampleRate);
-  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+/** A long, soft room: the "big empty world" echo. */
+function reverbImpulse(ctx, seconds = 5) {
+  const len = ctx.sampleRate * seconds, b = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
   return b;
 }
 
 /** getFrame() returns the current readings (see readFrame in data.js). */
 export function createAudio(getFrame) {
-  let ctx = null, on = false, n = null, melody = 7, step = 0, meter = null;
+  let ctx = null, on = false, n = null, meter = null;
+  // Melody state: where the piano is, how many notes are left in the phrase, how long to rest.
+  let melody = 7, phraseLeft = 0, rest = 2, step = 0;
 
   function init() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -53,19 +52,23 @@ export function createAudio(getFrame) {
     limiter.threshold.value = -14; limiter.ratio.value = 6; limiter.attack.value = 0.01; limiter.release.value = 0.3;
     limiter.connect(master);
     const reverb = ctx.createConvolver(); reverb.buffer = reverbImpulse(ctx);
-    const wet = ctx.createGain(); wet.gain.value = 0.5; reverb.connect(wet); wet.connect(limiter);
-    const dry = ctx.createGain(); dry.gain.value = 0.85; dry.connect(limiter);
+    const wet = ctx.createGain(); wet.gain.value = 0.7; reverb.connect(wet); wet.connect(limiter);
+    const dry = ctx.createGain(); dry.gain.value = 0.75; dry.connect(limiter);
     const bus = ctx.createGain(); bus.connect(dry); bus.connect(reverb);
 
-    // Chord: four voices through a low-pass filter. A slow wobble makes it breathe.
-    const padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 700; padFilter.Q.value = 0.5;
+    // Piano tone control: oxygen opens or closes this filter.
+    const pianoTone = ctx.createBiquadFilter(); pianoTone.type = 'lowpass'; pianoTone.frequency.value = 2400; pianoTone.Q.value = 0.3;
+    pianoTone.connect(bus);
+
+    // Strings: a quiet held chord under the piano, with a slow swell.
+    const padFilter = ctx.createBiquadFilter(); padFilter.type = 'lowpass'; padFilter.frequency.value = 600; padFilter.Q.value = 0.4;
     const padGain = ctx.createGain(); padGain.gain.value = 0; padFilter.connect(padGain); padGain.connect(bus);
-    const breath = ctx.createOscillator(); breath.frequency.value = 0.09;
-    const breathDepth = ctx.createGain(); breathDepth.gain.value = 160;
-    breath.connect(breathDepth); breathDepth.connect(padFilter.frequency); breath.start();
-    const pad = [-12, 0, 7, 16].map((interval, k) => {
-      const osc = ctx.createOscillator(); osc.type = k === 0 ? 'sine' : 'triangle'; osc.frequency.value = 220; osc.detune.value = (k - 1.5) * 6;
-      const g = ctx.createGain(); g.gain.value = [0.1, 0.2, 0.15, 0.1][k];
+    const swell = ctx.createOscillator(); swell.frequency.value = 0.06;
+    const swellDepth = ctx.createGain(); swellDepth.gain.value = 140;
+    swell.connect(swellDepth); swellDepth.connect(padFilter.frequency); swell.start();
+    const pad = [0, 7, 14, 16].map((interval, k) => { // root, fifth, ninth, third: an open, hopeful chord
+      const osc = ctx.createOscillator(); osc.type = 'triangle'; osc.frequency.value = 220; osc.detune.value = (k - 1.5) * 7;
+      const g = ctx.createGain(); g.gain.value = [0.16, 0.12, 0.08, 0.08][k];
       osc.connect(g); g.connect(padFilter); osc.start();
       return { osc, interval };
     });
@@ -75,74 +78,92 @@ export function createAudio(getFrame) {
     const layer = (freq, q, swellHz) => {
       const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
       const filter = ctx.createBiquadFilter(); filter.type = 'bandpass'; filter.frequency.value = freq; filter.Q.value = q;
-      const swell = ctx.createGain(); swell.gain.value = 0.6;
+      const level = ctx.createGain(); level.gain.value = 0.6;
       const lfo = ctx.createOscillator(); lfo.frequency.value = swellHz;
       const lfoDepth = ctx.createGain(); lfoDepth.gain.value = 0.4;
-      lfo.connect(lfoDepth); lfoDepth.connect(swell.gain); lfo.start();
+      lfo.connect(lfoDepth); lfoDepth.connect(level.gain); lfo.start();
       const gain = ctx.createGain(); gain.gain.value = 0;
-      src.connect(filter); filter.connect(swell); swell.connect(gain); gain.connect(bus); src.start();
+      src.connect(filter); filter.connect(level); level.connect(gain); gain.connect(bus); src.start();
       return { filter, gain };
     };
-    n = { master, bus, padFilter, padGain, pad, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
+    n = { master, bus, pianoTone, padFilter, padGain, pad, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
 
     update(0.05);
     setInterval(tick, STEP_MS);
   }
 
-  /** A soft bell: two sine waves with a fast attack and a long fade. */
-  function bell(freq, vol, dur = 2.6) {
-    const t = ctx.currentTime;
-    const a = ctx.createOscillator(), b = ctx.createOscillator(), env = ctx.createGain(), bGain = ctx.createGain();
-    a.frequency.value = freq; b.frequency.value = freq * 2.01; bGain.gain.value = 0.2;
-    env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(vol, t + 0.02); env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    a.connect(env); b.connect(bGain); bGain.connect(env); env.connect(n.bus);
-    a.start(t); b.start(t); a.stop(t + dur + 0.1); b.stop(t + dur + 0.1);
+  /**
+   * A soft piano note: a stack of sine waves (the note plus its overtones).
+   * Higher overtones are quieter and fade faster, which is what makes a piano sound like a piano.
+   */
+  function piano(note, vol, delay = 0) {
+    const t = ctx.currentTime + delay, freq = midi(note);
+    const dur = clamp(5.5 - (note - 48) * 0.06, 2, 6); // low notes ring longer
+    const out = ctx.createGain(); out.gain.value = vol; out.connect(n.pianoTone);
+    [[1, 1, 1], [2, 0.42, 0.55], [3, 0.2, 0.35], [4.02, 0.1, 0.22], [5.03, 0.05, 0.15]].forEach(([mult, amp, life]) => {
+      const osc = ctx.createOscillator(), env = ctx.createGain();
+      osc.frequency.value = freq * mult * (1 + (Math.random() - 0.5) * 0.0015); // tiny detune, like real strings
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(amp, t + 0.012); // soft hammer
+      env.gain.exponentialRampToValueAtTime(amp * 0.35, t + 0.25 * life + 0.05); // quick first drop
+      env.gain.exponentialRampToValueAtTime(0.0001, t + dur * life); // long tail
+      osc.connect(env); env.connect(out);
+      osc.start(t); osc.stop(t + dur * life + 0.1);
+    });
   }
 
-  /** Point the continuous sounds (chord, wash, hiss) at the current readings. */
-  function update(glide = 1.2) {
+  /** Point the continuous sounds (strings, wash, hiss, piano tone) at the current readings. */
+  function update(glide = 1.5) {
     const f = getFrame();
     if (!f) return null;
     const now = ctx.currentTime;
     const oxy = clamp((f.doPct ?? 90) / 100, 0.05, 1);
     const murk = clamp((f.turb ?? 5) / 50, 0, 1);
 
-    // Temperature picks the chord: 1°C is a low C, 25°C is more than an octave higher.
-    const root = snap(48 + clamp(((f.temp ?? 12) - 1) / 24, 0, 1) * 14);
-    n.pad.forEach(({ osc, interval }) => osc.frequency.setTargetAtTime(midi(snap(root + interval)), now, glide));
-    n.padGain.gain.setTargetAtTime(0.3 + 0.5 * oxy, now, glide);
-    n.padFilter.frequency.setTargetAtTime(350 + 1900 * oxy, now, glide);
+    // Temperature picks the key: 1°C sits around A, 25°C is seven semitones higher.
+    const key = Math.round(45 + clamp(((f.temp ?? 12) - 1) / 24, 0, 1) * 7);
+    n.pad.forEach(({ osc, interval }) => osc.frequency.setTargetAtTime(midi(key + 12 + interval), now, glide));
+    n.padGain.gain.setTargetAtTime(0.18 + 0.3 * oxy, now, glide);
+    n.padFilter.frequency.setTargetAtTime(380 + 900 * oxy, now, glide);
+    n.pianoTone.frequency.setTargetAtTime(700 + 3200 * oxy, now, glide);
 
-    n.wash.gain.gain.setTargetAtTime(0.03 + murk * 0.22, now, glide);
+    n.wash.gain.gain.setTargetAtTime(0.02 + murk * 0.2, now, glide);
     n.wash.filter.frequency.setTargetAtTime(520 - murk * 260, now, glide);
-    n.wind.gain.gain.setTargetAtTime(f.windN * 0.12, now, glide);
+    n.wind.gain.gain.setTargetAtTime(f.windN * 0.1, now, glide);
     n.wind.filter.frequency.setTargetAtTime(900 + f.windN * 1400, now, glide);
-    return { f, oxy, root };
+    return { f, oxy, key };
   }
 
   function tick() {
     if (!on) return;
     const state = update();
     if (!state) return;
-    const { f, oxy, root } = state;
+    const { f, oxy, key } = state;
     step++;
 
-    // Melody: pH sets the register it drifts toward. A note every other step, with rests.
-    const target = Math.round(lerp(5, 13, clamp(((f.ph ?? 7) - 6.3) / 1.4, 0, 1)));
-    if (step % 2 === 0 && Math.random() < 0.85) {
-      const pull = Math.sign(target - melody);
-      melody += Math.random() < 0.65 ? pull : Math.random() < 0.5 ? -1 : 1;
-      melody = clamp(melody, 3, 15);
-      bell(midi(48 + degree(melody)), 0.07 + 0.08 * oxy);
+    // The piano plays short phrases with silence between them.
+    if (phraseLeft > 0) {
+      if (chance(0.5 + 0.4 * oxy)) {
+        // pH sets the height the melody drifts toward.
+        const target = Math.round(lerp(5, 12, clamp(((f.ph ?? 7) - 6.3) / 1.4, 0, 1)));
+        const pull = Math.sign(target - melody);
+        melody = clamp(melody + (chance(0.6) ? pull : chance(0.5) ? -1 : 1) * (chance(0.2) ? 2 : 1), 3, 15);
+        const note = key + 12 + degree(melody);
+        piano(note, 0.16 + 0.1 * oxy);
+        if (chance(0.3 * oxy)) piano(key + 12 + degree(melody - 2), 0.1, 0.03); // a soft harmony note underneath
+        if (chance(0.25 * oxy)) piano(key + 12 + degree(melody + 1), 0.11, STEP_MS / 2000); // a quick in-between note
+      }
+      phraseLeft--;
+      if (phraseLeft === 0) rest = Math.round(lerp(7, 3, oxy) + Math.random() * 3); // less oxygen = longer silences
+    } else if (--rest <= 0) {
+      phraseLeft = Math.round(2 + oxy * 4 + Math.random() * 2);
+      piano(key + degree(chance(0.7) ? 0 : 3), 0.2); // a low note opens each phrase
+      if (chance(0.5)) piano(key + 7, 0.1, 0.04);
     }
-    // Every 16 steps, a low bell on the chord's root marks the bar.
-    if (step % 16 === 0) bell(midi(root), 0.12, 4);
 
-    // Rain: drips, more of them the harder it rains.
-    const drips = Math.round(clamp(f.rain, 0, 6) * 1.5 * (Math.random() + 0.3));
-    for (let i = 0; i < drips; i++) {
-      setTimeout(() => on && bell(midi(84 + degree(Math.floor(Math.random() * 6))), 0.04, 0.7), Math.random() * STEP_MS);
-    }
+    // Rain: high, short piano drips.
+    const drips = Math.round(clamp(f.rain, 0, 6) * 1.2 * (Math.random() + 0.3));
+    for (let i = 0; i < drips; i++) piano(key + 36 + degree(Math.floor(Math.random() * 6)), 0.05, Math.random() * (STEP_MS / 1000));
   }
 
   return {
