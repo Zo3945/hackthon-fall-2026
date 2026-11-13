@@ -60,6 +60,7 @@ export function usePond(canvasRef) {
       eng.live = await fetchLive();
       eng.series = eng.live;
       eng.pos = eng.live.n - 1;
+      eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); // live mode always moves at the slowest speed
       setLiveFailed(false); setMode('live'); setPlaying(false); snapshot();
     } catch (err) {
       console.warn('Live feed failed', err);

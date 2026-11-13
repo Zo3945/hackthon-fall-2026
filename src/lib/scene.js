@@ -2,6 +2,10 @@
 //   water color  = temperature        murkiness = turbidity
 //   waves        = wind               rain      = rain
 //   fish energy  = dissolved oxygen   sky       = time of day
+//   geese        = leave when the water is near freezing, shelter from wind and rain
+//   turtles      = bask on the log when warm and sunny, sink and rest when cold
+//   reeds        = bend with the wind
+//   dragonflies  = warm, calm, dry days   fireflies = warm, dry nights
 
 import { clamp, lerp } from './data.js';
 
@@ -33,6 +37,51 @@ export function createScene(canvas) {
   }));
   const pads = Array.from({ length: 6 }, () => ({ x: Math.random(), y: 0.36 + Math.random() * 0.06, r: 0.03 + Math.random() * 0.035 }));
   const drops = [], ripples = [], bubbles = [];
+  const geese = Array.from({ length: 3 }, (_, i) => ({ x: 0.24 + i * 0.2 + Math.random() * 0.06, dir: i % 2 ? 1 : -1, phase: Math.random() * TAU, size: 0.9 + Math.random() * 0.25, here: 1 }));
+  const turtles = Array.from({ length: 2 }, (_, i) => ({ x: 0.3 + i * 0.3, y: 0.35, dir: i ? 1 : -1, phase: Math.random() * TAU, size: 1 - i * 0.22, slot: i }));
+  const reeds = Array.from({ length: 18 }, (_, i) => ({ x: i < 10 ? Math.random() * 0.1 : 0.91 + Math.random() * 0.09, h: 0.07 + Math.random() * 0.09, phase: Math.random() * TAU, head: Math.random() < 0.6 }));
+  const dragonflies = Array.from({ length: 3 }, () => ({ x: Math.random(), y: Math.random(), tx: Math.random(), ty: Math.random(), wait: 0 }));
+  const fireflies = Array.from({ length: 16 }, () => ({ x: Math.random(), y: Math.random(), phase: Math.random() * TAU, speed: 0.5 + Math.random() }));
+  let dragonflyAlpha = 0, fireflyAlpha = 0;
+
+  // A turtle seen from the side. mode: 'bask' (on the log), 'swim', or 'rest' (tucked in, cold).
+  function drawTurtle(px, py, s, dir, mode, phase, shell, skin, alpha) {
+    const paddle = mode === 'swim' ? Math.sin(T * 2.2 + phase) * 0.5 : 0;
+    const out = mode === 'rest' ? 0.3 : 1; // how far head and legs stick out
+    g.save(); g.translate(px, py); g.scale(dir, 1); g.globalAlpha = alpha;
+    g.fillStyle = rgb(skin);
+    g.save(); g.translate(s * 0.65, s * 0.12); g.rotate(0.55 + paddle); g.beginPath(); g.ellipse(s * 0.3 * out, 0, s * 0.5 * out, s * 0.16, 0, 0, TAU); g.fill(); g.restore();
+    g.save(); g.translate(-s * 0.75, s * 0.12); g.rotate(2.5 - paddle * 0.7); g.beginPath(); g.ellipse(s * 0.25 * out, 0, s * 0.4 * out, s * 0.14, 0, 0, TAU); g.fill(); g.restore();
+    g.beginPath(); g.ellipse(s * (0.9 + 0.5 * out), -s * (mode === 'bask' ? 0.2 : 0.02), s * 0.32, s * 0.22, 0, 0, TAU); g.fill();
+    if (out === 1) { g.fillStyle = '#0c1a14'; g.beginPath(); g.arc(s * 1.5, -s * (mode === 'bask' ? 0.26 : 0.08), s * 0.06, 0, TAU); g.fill(); }
+    g.fillStyle = rgb(shell);
+    g.beginPath(); g.ellipse(0, 0, s * 1.15, s * 0.75, 0, Math.PI, TAU); g.quadraticCurveTo(0, s * 0.42, -s * 1.15, 0); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.16)'; g.lineWidth = DPR;
+    for (const k of [-0.5, 0, 0.5]) { g.beginPath(); g.arc(s * k, -s * 0.05, s * 0.36, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
+    g.restore();
+  }
+
+  // A Canada goose floating on the surface. tucked = head down, sheltering.
+  function drawGoose(px, py, s, dir, tucked, moving, day, alpha) {
+    g.save(); g.translate(px, py); g.scale(dir, 1); g.globalAlpha = alpha;
+    if (moving) { // wake
+      g.strokeStyle = 'rgba(255,255,255,.3)'; g.lineWidth = 1.2 * DPR;
+      for (const k of [1, 2]) { g.beginPath(); g.moveTo(-s * 1.2 * k, s * 0.42); g.lineTo(-s * (1.2 * k + 0.9), s * 0.42 + s * 0.05 * k); g.stroke(); }
+    }
+    const dark = mix([18, 18, 20], [34, 32, 30], day), body = mix([62, 52, 44], [146, 122, 98], day), pale = mix([120, 116, 110], [232, 226, 214], day);
+    g.fillStyle = rgb(pale); g.beginPath(); g.ellipse(-s * 1.2, -s * 0.08, s * 0.42, s * 0.3, -0.3, 0, TAU); g.fill();
+    g.fillStyle = rgb(dark); g.beginPath(); g.moveTo(-s * 1.35, -s * 0.3); g.lineTo(-s * 1.95, -s * 0.42); g.lineTo(-s * 1.45, -s * 0.02); g.closePath(); g.fill();
+    g.fillStyle = rgb(body); g.beginPath(); g.ellipse(0, 0, s * 1.45, s * 0.6, 0, Math.PI, TAU); g.quadraticCurveTo(0, s * 0.75, -s * 1.45, 0); g.closePath(); g.fill();
+    g.fillStyle = rgb(mix(body, pale, 0.55)); g.beginPath(); g.ellipse(s * 0.85, s * 0.02, s * 0.6, s * 0.4, 0, 0, TAU); g.fill();
+    const hx = s * (tucked ? 1.25 : 1.4), hy = -s * (tucked ? 0.75 : 1.6);
+    g.strokeStyle = rgb(dark); g.lineWidth = s * 0.32; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(s * 1.0, -s * 0.25); g.quadraticCurveTo(s * 1.0, hy * 0.7, hx, hy); g.stroke();
+    g.fillStyle = rgb(dark);
+    g.beginPath(); g.arc(hx, hy, s * 0.27, 0, TAU); g.fill();
+    g.beginPath(); g.moveTo(hx + s * 0.2, hy - s * 0.1); g.lineTo(hx + s * 0.62, hy + s * 0.06); g.lineTo(hx + s * 0.2, hy + s * 0.16); g.closePath(); g.fill();
+    g.fillStyle = rgb(pale); g.beginPath(); g.ellipse(hx - s * 0.02, hy + s * 0.1, s * 0.12, s * 0.17, 0.5, 0, TAU); g.fill();
+    g.restore();
+  }
 
   function resize() {
     DPR = Math.min(2, window.devicePixelRatio || 1);
@@ -112,6 +161,70 @@ export function createScene(canvas) {
       g.beginPath(); g.ellipse(px, py, r * 1.6, r * 0.5, 0, 0.25, 6.0); g.lineTo(px, py); g.fill();
     }
 
+    // Reeds at the edges, bending with the wind
+    for (const r of reeds) {
+      const bx = r.x * W, by = horizon + H * 0.014, len = r.h * H;
+      const bend = (Math.sin(T * (0.8 + windN * 2) + r.phase) * (0.15 + windN * 0.6) + windN * 0.9) * len * 0.35;
+      g.strokeStyle = rgb(mix([24, 52, 34], [78, 128, 64], day)); g.lineWidth = 2.2 * DPR; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx, by - len * 0.5, bx + bend, by - len); g.stroke();
+      if (r.head) {
+        g.fillStyle = rgb(mix([40, 28, 18], [112, 76, 46], day));
+        g.save(); g.translate(bx + bend * 0.8, by - len * 0.86); g.rotate((bend / len) * 0.9);
+        g.beginPath(); g.ellipse(0, 0, 2.8 * DPR, len * 0.1, 0, 0, TAU); g.fill(); g.restore();
+      }
+    }
+
+    // A floating log, where turtles bask
+    const logX = W * 0.68, logY = horizon + H * 0.022, logW = H * 0.2;
+    g.fillStyle = rgb(mix([38, 27, 20], [98, 70, 46], day));
+    g.beginPath(); g.ellipse(logX, logY, logW / 2, H * 0.012, 0, 0, TAU); g.fill();
+
+    // Turtles: bask when warm and sunny, swim otherwise, rest low when the water is cold
+    const waterTemp = f.temp ?? 12;
+    const turtleMode = waterTemp < 6 ? 'rest' : waterTemp >= 15 && day > 0.5 && rainN < 0.1 ? 'bask' : 'swim';
+    const shell = mix([34, 60, 38], [72, 108, 58], day), skin = mix([60, 80, 44], [128, 150, 78], day);
+    for (const t of turtles) {
+      const s = H * 0.026 * t.size;
+      let ty;
+      if (turtleMode === 'bask') {
+        const tx = (logX + (t.slot - 0.5) * logW * 0.5) / W;
+        t.x += (tx - t.x) * dt * 0.6; t.dir = 1;
+        ty = (logY - H * 0.012 - s * 0.05 - horizon) / (H - horizon);
+      } else if (turtleMode === 'rest') {
+        ty = 0.5 + t.slot * 0.07;
+      } else {
+        t.x += t.dir * 0.012 * dt * (0.5 + tN);
+        if (t.x > 0.9) t.dir = -1;
+        if (t.x < 0.1) t.dir = 1;
+        ty = 0.2 + t.slot * 0.13 + Math.sin(T * 0.25 + t.phase) * 0.04;
+      }
+      t.y += (ty - t.y) * dt * 0.6;
+      const under = t.y > 0.03;
+      drawTurtle(t.x * W, horizon + (H - horizon) * t.y, s, t.dir, turtleMode, t.phase,
+        under ? mix(shell, water, 0.3) : shell, under ? mix(skin, water, 0.3) : skin, under ? 0.95 - turbN * 0.4 : 1);
+    }
+
+    // Geese: paddle around, shelter by the reeds in wind and rain, leave when the water is near freezing
+    const shelter = windN > 0.75 || rainN > 0.5;
+    geese.forEach((gz, i) => {
+      gz.here += ((waterTemp >= 4 ? 1 : 0) - gz.here) * dt * 0.5;
+      if (gz.here < 0.02) return;
+      let moving = true;
+      if (shelter) {
+        const tx = 0.13 + i * 0.055;
+        moving = Math.abs(tx - gz.x) > 0.01;
+        if (moving) { gz.dir = tx < gz.x ? -1 : 1; gz.x += gz.dir * 0.03 * dt; }
+      } else {
+        gz.x += gz.dir * 0.012 * dt * (0.5 + 0.5 * Math.sin(T * 0.3 + gz.phase) ** 2);
+        if (gz.x > 0.56) gz.dir = -1;
+        if (gz.x < 0.14) gz.dir = 1;
+      }
+      const s = H * 0.024 * gz.size;
+      const py = horizon + H * 0.012 + Math.sin(T * (1 + windN * 2) + gz.phase) * amp * 0.2 - (1 - gz.here) * H * 0.3;
+      drawGoose(gz.x * W, py, s, gz.dir, shelter && !moving, moving && gz.here > 0.9, day, gz.here);
+    });
+    g.globalAlpha = 1;
+
     // Rain and the rings it leaves
     for (let i = 0; i < rainN * 40 * dt; i++) drops.push({ x: Math.random() * W, y: -10, v: H * (0.9 + Math.random() * 0.5), end: horizon + (H - horizon) * (0.05 + Math.random() * 0.9) });
     g.strokeStyle = 'rgba(200,225,255,.5)'; g.lineWidth = 1.2 * DPR;
@@ -157,6 +270,37 @@ export function createScene(canvas) {
       if (b.y < horizon) { bubbles.splice(i, 1); continue; }
       g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = DPR;
       g.beginPath(); g.arc(b.x, b.y, b.r * DPR, 0, TAU); g.stroke();
+    }
+
+    // Dragonflies on warm, calm, dry days
+    const dragonflyWeather = waterTemp >= 16 && day > 0.45 && rainN < 0.08 && windN < 0.75;
+    dragonflyAlpha += ((dragonflyWeather ? 1 : 0) - dragonflyAlpha) * dt;
+    if (dragonflyAlpha > 0.02) {
+      for (const d of dragonflies) {
+        d.wait -= dt;
+        if (d.wait <= 0) { d.tx = 0.08 + Math.random() * 0.84; d.ty = Math.random(); d.wait = 0.6 + Math.random() * 1.8; }
+        d.x += (d.tx - d.x) * dt * 3; d.y += (d.ty - d.y) * dt * 3;
+        const s = H * 0.011, flap = Math.abs(Math.sin(T * 40 + d.tx * 9));
+        g.save(); g.translate(d.x * W, horizon - H * 0.1 + d.y * H * 0.1); g.scale(d.tx > d.x ? 1 : -1, 1); g.globalAlpha = dragonflyAlpha;
+        g.fillStyle = 'rgba(230,245,255,.55)';
+        for (const wx of [-0.15, 0.3]) { g.beginPath(); g.ellipse(s * wx, -s * 0.55 * flap, s * 0.95, s * 0.22, -0.35, 0, TAU); g.fill(); }
+        g.strokeStyle = 'rgba(70,200,225,.95)'; g.lineWidth = 2 * DPR; g.lineCap = 'round';
+        g.beginPath(); g.moveTo(-s * 1.7, 0); g.lineTo(s * 0.6, 0); g.stroke();
+        g.restore();
+      }
+    }
+
+    // Fireflies on warm, dry nights
+    const fireflyWeather = day < 0.3 && (f.air ?? waterTemp) >= 14 && rainN < 0.05;
+    fireflyAlpha += ((fireflyWeather ? 1 : 0) - fireflyAlpha) * dt * 0.6;
+    if (fireflyAlpha > 0.02) {
+      for (const b of fireflies) {
+        const px = (b.x + Math.sin(T * 0.1 * b.speed + b.phase) * 0.03) * W;
+        const py = horizon - H * (0.01 + b.y * 0.12) + Math.sin(T * 0.7 * b.speed + b.phase) * H * 0.008;
+        const a = Math.max(0, Math.sin(T * b.speed * 1.6 + b.phase)) ** 3 * fireflyAlpha;
+        g.fillStyle = `rgba(220,255,120,${a * 0.25})`; g.beginPath(); g.arc(px, py, 7 * DPR, 0, TAU); g.fill();
+        g.fillStyle = `rgba(240,255,170,${a})`; g.beginPath(); g.arc(px, py, 2 * DPR, 0, TAU); g.fill();
+      }
     }
 
     // Murk veil and vignette
