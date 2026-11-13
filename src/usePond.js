@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clamp, computeNorm, fetchLive, findEvents, loadHistory, readFrame } from './lib/data.js';
 import { health } from './lib/health.js';
-import { answer } from './lib/ask.js';
 import { describe } from './lib/creatures.js';
 import { createScene } from './lib/scene.js';
 import { createAudio } from './lib/audio.js';
@@ -101,7 +100,12 @@ export function usePond(canvasRef) {
         if (eng.pos > s.n - 1) eng.pos = 0;
       }
       scene.draw(dt, readFrame(s, eng.pos, eng.norm));
-      if (now - lastUi > UI_REFRESH_MS) { lastUi = now; snapshot(); }
+      if (now - lastUi > UI_REFRESH_MS) {
+        lastUi = now; snapshot();
+        // Keep the bubble attached to the clicked animal as it moves, with fresh readings.
+        const hit = scene.selectedHit();
+        if (hit) setInfo({ x: hit.x, y: hit.y, ...describe(hit, readFrame(s, eng.pos, eng.norm)) });
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -142,18 +146,12 @@ export function usePond(canvasRef) {
     toggleSound: () => setSound(!sound),
     // Clicking an animal: find which one is under the pointer and let it explain itself.
     info,
-    closeInfo: () => setInfo(null),
+    closeInfo: () => { eng.scene?.setSelected(null); setInfo(null); },
     isAnimalAt: (x, y) => Boolean(eng.scene?.hitTest(x, y)),
     inspect: (x, y) => {
       const hit = eng.scene?.hitTest(x, y);
+      eng.scene?.setSelected(hit);
       setInfo(hit ? { x: hit.x, y: hit.y, ...describe(hit, readFrame(eng.series, eng.pos, eng.norm)) } : null);
-    },
-    // Ask the pond: answers come from the live week of readings (or the history if live is down).
-    ask: (question) => answer(question, eng.live ?? eng.hist, Boolean(eng.live)),
-    showMoment: (pos) => {
-      const live = Boolean(eng.live);
-      eng.series = eng.live ?? eng.hist; eng.pos = pos;
-      setMode(live ? 'live' : 'replay'); setPlaying(false); snapshot();
     },
   };
 }

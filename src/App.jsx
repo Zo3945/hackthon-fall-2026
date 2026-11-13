@@ -3,7 +3,6 @@ import { usePond } from './usePond.js';
 import Header from './components/Header.jsx';
 import Dock from './components/Dock.jsx';
 import Splash from './components/Splash.jsx';
-import AskPond from './components/AskPond.jsx';
 import InfoBubble from './components/InfoBubble.jsx';
 
 export default function App() {
@@ -36,10 +35,9 @@ export default function App() {
         onClick={(e) => pond.inspect(e.clientX, e.clientY)}
         onMouseMove={(e) => { e.currentTarget.style.cursor = pond.isAnimalAt(e.clientX, e.clientY) ? 'pointer' : 'default'; }}
       />
-      {pond.info && <InfoBubble key={`${pond.info.title}-${pond.info.x}-${pond.info.y}`} info={pond.info} onClose={pond.closeInfo} />}
+      {pond.info && <InfoBubble key={pond.info.title} info={pond.info} onClose={pond.closeInfo} />}
       {pond.view && <Header pond={pond} />}
       {pond.view && <Dock pond={pond} />}
-      {pond.view && pond.started && <AskPond pond={pond} />}
       {!pond.started && <Splash onStart={pond.start} />}
     </>
   );

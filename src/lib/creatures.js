@@ -37,6 +37,16 @@ export const FACTS = {
   ],
 };
 
+// Why the fish are where they are right now
+const FISH_WHERE = {
+  surface: 'Up at the top, gulping for air',
+  cold: 'Staying deep, where the water is warmest in winter',
+  storm: 'Staying deep, away from the storm',
+  hot: 'Staying deep, where it is cooler',
+  night: 'Resting low for the night',
+  normal: 'Swimming all over the pond',
+};
+
 const FISH_NAMES = ['Sunny', 'Finn', 'Pebble', 'Goldie', 'Bubbles', 'Splash', 'Dot', 'Pumpkin', 'Ripple'];
 const TURTLE_NAMES = ['Mossy', 'Shelly'];
 const GOOSE_NAMES = ['Maple', 'Hudson', 'Birch'];
@@ -52,7 +62,7 @@ export function describe(hit, f) {
     return {
       title: `${pick(FISH_NAMES, id)} the sunfish`,
       fact: pick(FACTS.fish, id),
-      reading: o == null ? 'Air in the water right now: no reading' : `Air in the water right now: ${o.toFixed(0)}%${word}`,
+      reading: `${o == null ? 'Air in the water right now: no reading' : `Air in the water right now: ${o.toFixed(0)}%${word}`}. ${FISH_WHERE[hit.where] ?? FISH_WHERE.normal}.`,
     };
   }
 

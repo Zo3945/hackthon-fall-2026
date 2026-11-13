@@ -146,6 +146,14 @@ export async function fetchLive() {
       return COUNTED.includes(c) ? sum : sum / v.length;
     }));
   }
+  // A flat oxygen line for six hours means a stuck sensor, not a calm pond. Drop it.
+  const o = COLS.indexOf('DOpct');
+  for (let i = 0; i + 6 <= rows.length; i++) {
+    const w = rows.slice(i, i + 6).map((r) => r[o]);
+    if (w.every((v) => v != null) && Math.max(...w) - Math.min(...w) <= 0.15) w.forEach((_, k) => { rows[i + k].stuck = true; });
+  }
+  for (const r of rows) if (r.stuck) r[o] = null;
+
   return new Series({ rows, startMs: lo * HOUR, lastMs });
 }
 
@@ -154,6 +162,17 @@ export function findEvents(series) {
   const best = (name, score = (x) => x) => {
     let top = -Infinity, at = 0;
     series.col(name).forEach((v, i) => { if (v != null && score(v) > top) { top = score(v); at = i; } });
+    return at;
+  };
+  // Like best(), but scores the 3-hour average, so a one-hour sensor blip can't win.
+  const steady = (name, score = (x) => x, allowed = () => true) => {
+    const s = series.col(name);
+    let top = -Infinity, at = 0;
+    for (let i = 1; i < series.n - 1; i++) {
+      if (s[i - 1] == null || s[i] == null || s[i + 1] == null || !allowed(i)) continue;
+      const v = score((s[i - 1] + s[i] + s[i + 1]) / 3);
+      if (v > top) { top = v; at = i; }
+    }
     return at;
   };
   const rain = series.col('Rain');
@@ -169,8 +188,9 @@ export function findEvents(series) {
   return [
     { label: 'Biggest storm', pos: peakAt },
     { label: 'Warmest water', pos: best('Temp') },
-    { label: 'Lowest oxygen', pos: best('DOpct', (x) => -x) },
-    { label: 'Murkiest water', pos: best('Turb') },
+    // Only in water above 50°F: the near-zero winter readings follow a stuck-sensor stretch and are not trusted here.
+    { label: 'Lowest oxygen', pos: steady('DOpct', (x) => -x, (i) => (series.col('Temp')[i] ?? 0) >= 10) },
+    { label: 'Murkiest water', pos: steady('Turb') },
     { label: 'Coldest day', pos: best('Temp', (x) => -x) },
   ];
 }

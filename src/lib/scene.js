@@ -2,6 +2,7 @@
 //   water color  = temperature        murkiness = turbidity
 //   waves        = wind               rain      = rain
 //   fish energy  = dissolved oxygen   sky       = time of day
+//   fish depth   = up top when oxygen is low, deep in cold water, storms and hot sun, low at night
 //   geese        = leave when the water is near freezing, shelter from wind and rain
 //   turtles      = bask on the log when warm and sunny, sink and rest when cold
 //   reeds        = bend with the wind
@@ -44,6 +45,7 @@ export function createScene(canvas) {
   const fireflies = Array.from({ length: 16 }, () => ({ x: Math.random(), y: Math.random(), phase: Math.random() * TAU, speed: 0.5 + Math.random() }));
   let dragonflyAlpha = 0, fireflyAlpha = 0;
   let dropDebt = 0, flash = 0, bolt = null, nextStrike = 0; // rain and lightning state
+  let selected = null, selectedHit = null; // the animal the visitor clicked, if any
   const hits = []; // where each animal was drawn this frame, so clicks can find them
 
   // A turtle seen from the side. mode: 'bask' (on the log), 'swim', or 'rest' (tucked in, cold).
@@ -186,7 +188,8 @@ export function createScene(canvas) {
     }
 
     // Lily pads: more when warm and calm
-    const padCount = Math.max(1, Math.round(2 + tN * 4 - windN * 2));
+    // Lily pads die back in cold water and spread as it warms
+    const padCount = (f.temp ?? 12) < 8 ? 0 : Math.max(1, Math.round((tN - 0.2) * 7 - windN * 2));
     for (let i = 0; i < padCount; i++) {
       const p = pads[i % pads.length];
       const px = ((p.x + Math.sin(T * 0.05 + i) * 0.01) % 1) * W, py = horizon + (H - horizon) * (p.y - 0.34), r = p.r * H;
@@ -282,11 +285,20 @@ export function createScene(canvas) {
     // Fish: lively with oxygen, gasping at the surface without it
     const energy = clamp(doN, 0.12, 1);
     const gasping = (f.doPct ?? 90) < 40;
+    // Where the fish go, the way pond fish really behave. top and bottom are 0 (surface) to 1 (deepest).
+    const place = gasping ? { kind: 'surface', top: 0.08, bottom: 0.2, speed: 0.3 } // gulping at the top
+      : waterTemp < 8 ? { kind: 'cold', top: 0.75, bottom: 1, speed: 0.35 } // winter: the deep water is the warmest
+        : stormN > 0.15 ? { kind: 'storm', top: 0.6, bottom: 1, speed: 0.8 } // away from the pounding surface
+          : waterTemp >= 24 && day > 0.6 ? { kind: 'hot', top: 0.55, bottom: 1, speed: 0.7 } // hot sun: deeper is cooler
+            : day < 0.25 ? { kind: 'night', top: 0.5, bottom: 0.95, speed: 0.45 } // resting low at night
+              : { kind: 'normal', top: 0.2, bottom: 0.95, speed: 1 };
+    // Deepest spot that is still visible above the control panel
+    const floor = clamp((H - 215 * DPR - horizon) / (H - horizon), 0.35, 0.9);
     for (const fi of fish) {
-      fi.x += fi.vx * energy * dt * (gasping ? 0.2 : 0.75);
+      fi.x += fi.vx * energy * dt * 0.75 * place.speed;
       if (fi.x > 1.08) fi.x = -0.08;
       if (fi.x < -0.08) fi.x = 1.08;
-      const targetY = gasping ? 0.12 + (fi.row % 3) * 0.02 : 0.28 + ((fi.row * 0.137) % 0.55);
+      const targetY = (0.04 + lerp(place.top, place.bottom, (fi.row * 0.618) % 1) * 0.96) * floor;
       fi.y += (targetY - fi.y) * dt * 0.6;
       const bob = Math.sin(T * (gasping ? 3 : 1.4) + fi.phase) * (gasping ? 0.006 : 0.012);
       const px = fi.x * W, py = horizon + (H - horizon) * (fi.y + bob);
@@ -300,7 +312,7 @@ export function createScene(canvas) {
       g.fillStyle = '#10202a'; g.beginPath(); g.arc(s * 0.85, -s * 0.15, s * 0.13, 0, TAU); g.fill();
       if (gasping) { g.fillStyle = 'rgba(10,20,30,.7)'; g.beginPath(); g.ellipse(s * 1.35, s * 0.12, s * 0.14, s * 0.08, 0, 0, TAU); g.fill(); }
       g.restore();
-      hits.push({ kind: 'fish', id: fi.row, size: fi.size, depth: fi.y, x: px, y: py, r: s * 2.2 });
+      hits.push({ kind: 'fish', id: fi.row, where: place.kind, x: px, y: py, r: s * 2.2 });
       if (Math.random() < 1.2 * doN * dt) bubbles.push({ x: px + dir * s * 1.5, y: py - s * 0.3, v: 30 + Math.random() * 30, r: 1.5 + Math.random() * 2.5 });
     }
     g.globalAlpha = 1;
@@ -350,6 +362,15 @@ export function createScene(canvas) {
     gr = g.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 0.95);
     gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.4)');
     g.fillStyle = gr; g.fillRect(0, 0, W, H);
+
+    // Highlight the clicked animal with a soft pulsing ring that follows it
+    selectedHit = selected ? hits.find((h) => h.kind === selected.kind && h.id === selected.id) ?? null : null;
+    if (selectedHit) {
+      const pulse = 0.5 + 0.5 * Math.sin(T * 4), r = selectedHit.r * (1.05 + pulse * 0.08);
+      g.fillStyle = 'rgba(127,224,200,.12)'; g.beginPath(); g.arc(selectedHit.x, selectedHit.y, r, 0, TAU); g.fill();
+      g.strokeStyle = `rgba(127,224,200,${0.65 + pulse * 0.35})`; g.lineWidth = 3 * DPR;
+      g.beginPath(); g.arc(selectedHit.x, selectedHit.y, r, 0, TAU); g.stroke();
+    }
   }
 
   resize();
@@ -365,5 +386,11 @@ export function createScene(canvas) {
     return best && { ...best, x: best.x / DPR, y: best.y / DPR };
   }
 
-  return { draw, hitTest, destroy: () => window.removeEventListener('resize', resize) };
+  const toCss = (h) => h && { ...h, x: h.x / DPR, y: h.y / DPR };
+
+  return {
+    setSelected: (hit) => { selected = hit && { kind: hit.kind, id: hit.id }; },
+    selectedHit: () => toCss(selectedHit), // where the clicked animal is right now
+    draw, hitTest, destroy: () => window.removeEventListener('resize', resize),
+  };
 }

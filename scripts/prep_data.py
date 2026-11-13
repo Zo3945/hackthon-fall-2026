@@ -50,6 +50,18 @@ def read_hourly(files, cols, limits, agg):
     return out
 
 
+def unstick(vals, hours=6, tolerance=0.15):
+    """Null out stretches where a sensor repeats almost the same value for six hours.
+    Oxygen in a pond rises and falls every day, so a flat line means a stuck sensor."""
+    res = list(vals)
+    for i in range(len(vals) - hours + 1):
+        w = vals[i:i + hours]
+        if all(v is not None for v in w) and max(w) - min(w) <= tolerance:
+            for k in range(i, i + hours):
+                res[k] = None
+    return res
+
+
 def despike(vals, win=5, k=4.0, floor=0.0):
     """Null out points far from the rolling median (sensor glitches)."""
     n = len(vals)
@@ -105,6 +117,8 @@ def main():
     floors = {"Temp": 1.5, "DOpct": 15, "Turb": 40, "pH": 0.35, "Cond": 120}
     for c in WATER:
         raw = [water.get(h, {}).get(c) for h in hours]
+        if c == "DOpct":
+            raw = unstick(raw)
         cols[c] = fill_short(despike(raw, floor=floors[c]))
     for c in ("Rain", "WindSpeed", "AirTemp"):
         raw = [weather.get(h, {}).get(c) for h in hours]

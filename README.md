@@ -14,7 +14,6 @@ A living picture of Choate Pond, driven by real sensor readings, for people who 
 - The animals are illustrations driven by the readings, not counted wildlife.
 - A plain-words message says how the pond is doing and why.
 - Click a fish, turtle or goose to see its name, a short fact of its own, and the live reading it stands for.
-- Ask the pond: type a question such as "How was last night?" and the pond answers from its own readings. The answers come from rules in the code, not an AI service.
 - A calm soundscape follows the same readings (pitch is temperature, brightness is oxygen, bell notes follow pH, drips are rain).
 
 ## Run it
@@ -40,7 +39,6 @@ The page opens on the live reading from the Blue CoLab API (https://colabprod01.
 | `src/usePond.js` | One React hook that runs everything: data, live or replay mode, the playback clock |
 | `src/lib/data.js` | Loads the history, fetches live readings, reads a value at any moment |
 | `src/lib/health.js` | Turns readings into the plain-words message |
-| `src/lib/ask.js` | Ask the pond: works out when and what a question is about, then answers from the data |
 | `src/lib/scene.js` | Draws the pond on a canvas |
 | `src/lib/creatures.js` | What each animal says when clicked |
 | `src/lib/audio.js` | The soundscape (Web Audio API) |

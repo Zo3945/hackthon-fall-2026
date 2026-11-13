@@ -1,6 +1,6 @@
 // Turns readings into a plain-words verdict anyone can understand.
 
-export function health({ temp, doPct, turb, ph }) {
+export function health({ temp, doPct, turb, ph, rain }) {
   let score = 100;
   const issues = [];
 
@@ -10,7 +10,7 @@ export function health({ temp, doPct, turb, ph }) {
     else if (doPct > 140) { score -= 8; issues.push('There is a lot of oxygen, usually from algae in the sun.'); }
   }
   if (turb != null) {
-    if (turb > 40) { score -= 25; issues.push('The water is murky, likely from storm runoff.'); }
+    if (turb > 40) { score -= 25; issues.push(rain > 0.3 ? 'The water is murky, likely from rain washing soil in.' : 'The water is murky.'); }
     else if (turb > 15) { score -= 8; issues.push('The water is a little cloudy.'); }
   }
   if (ph != null && (ph < 6.5 || ph > 8.5)) { score -= 15; issues.push('The water is more acidic than fish like.'); }
