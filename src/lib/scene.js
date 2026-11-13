@@ -43,6 +43,7 @@ export function createScene(canvas) {
   const dragonflies = Array.from({ length: 3 }, () => ({ x: Math.random(), y: Math.random(), tx: Math.random(), ty: Math.random(), wait: 0 }));
   const fireflies = Array.from({ length: 16 }, () => ({ x: Math.random(), y: Math.random(), phase: Math.random() * TAU, speed: 0.5 + Math.random() }));
   let dragonflyAlpha = 0, fireflyAlpha = 0;
+  const hits = []; // where each animal was drawn this frame, so clicks can find them
 
   // A turtle seen from the side. mode: 'bask' (on the log), 'swim', or 'rest' (tucked in, cold).
   function drawTurtle(px, py, s, dir, mode, phase, shell, skin, alpha) {
@@ -91,6 +92,7 @@ export function createScene(canvas) {
 
   function draw(dt, f) {
     T += dt;
+    hits.length = 0;
     const tN = clamp(((f.temp ?? 12) - 1) / 24, 0, 1);
     const turbN = clamp((f.turb ?? 4) / 50, 0, 1);
     const rainN = clamp(f.rain / 3, 0, 1);
@@ -202,6 +204,7 @@ export function createScene(canvas) {
       const under = t.y > 0.03;
       drawTurtle(t.x * W, horizon + (H - horizon) * t.y, s, t.dir, turtleMode, t.phase,
         under ? mix(shell, water, 0.3) : shell, under ? mix(skin, water, 0.3) : skin, under ? 0.95 - turbN * 0.4 : 1);
+      hits.push({ kind: 'turtle', mode: turtleMode, x: t.x * W, y: horizon + (H - horizon) * t.y, r: s * 1.9 });
     }
 
     // Geese: paddle around, shelter by the reeds in wind and rain, leave when the water is near freezing
@@ -222,6 +225,7 @@ export function createScene(canvas) {
       const s = H * 0.024 * gz.size;
       const py = horizon + H * 0.012 + Math.sin(T * (1 + windN * 2) + gz.phase) * amp * 0.2 - (1 - gz.here) * H * 0.3;
       drawGoose(gz.x * W, py, s, gz.dir, shelter && !moving, moving && gz.here > 0.9, day, gz.here);
+      if (gz.here > 0.5) hits.push({ kind: 'goose', sheltering: shelter, x: gz.x * W, y: py - s * 0.6, r: s * 2.2 });
     });
     g.globalAlpha = 1;
 
@@ -262,6 +266,7 @@ export function createScene(canvas) {
       g.fillStyle = '#10202a'; g.beginPath(); g.arc(s * 0.85, -s * 0.15, s * 0.13, 0, TAU); g.fill();
       if (gasping) { g.fillStyle = 'rgba(10,20,30,.7)'; g.beginPath(); g.ellipse(s * 1.35, s * 0.12, s * 0.14, s * 0.08, 0, 0, TAU); g.fill(); }
       g.restore();
+      hits.push({ kind: 'fish', x: px, y: py, r: s * 2.2 });
       if (Math.random() < 1.2 * doN * dt) bubbles.push({ x: px + dir * s * 1.5, y: py - s * 0.3, v: 30 + Math.random() * 30, r: 1.5 + Math.random() * 2.5 });
     }
     g.globalAlpha = 1;
@@ -312,5 +317,16 @@ export function createScene(canvas) {
 
   resize();
   window.addEventListener('resize', resize);
-  return { draw, destroy: () => window.removeEventListener('resize', resize) };
+  /** Which animal, if any, is at this point of the page? Returns the closest one. */
+  function hitTest(cssX, cssY) {
+    const x = cssX * DPR, y = cssY * DPR;
+    let best = null, bestDist = Infinity;
+    for (const h of hits) {
+      const d = Math.hypot(h.x - x, h.y - y);
+      if (d < h.r && d < bestDist) { best = h; bestDist = d; }
+    }
+    return best && { ...best, x: best.x / DPR, y: best.y / DPR };
+  }
+
+  return { draw, hitTest, destroy: () => window.removeEventListener('resize', resize) };
 }

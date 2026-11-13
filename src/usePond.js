@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clamp, computeNorm, fetchLive, findEvents, loadHistory, readFrame } from './lib/data.js';
 import { health } from './lib/health.js';
+import { answer } from './lib/ask.js';
+import { describe } from './lib/creatures.js';
 import { createScene } from './lib/scene.js';
 import { createAudio } from './lib/audio.js';
 
@@ -29,6 +31,7 @@ export function usePond(canvasRef) {
   const [started, setStarted] = useState(false);
   const [sound, setSoundState] = useState(false);
   const [events, setEvents] = useState([]);
+  const [info, setInfo] = useState(null); // speech bubble for a clicked animal
   const [view, setView] = useState(null); // snapshot for the UI, refreshed a few times a second
 
   const atEnd = () => eng.series && eng.pos >= eng.series.n - 1.01;
@@ -88,6 +91,7 @@ export function usePond(canvasRef) {
   useEffect(() => {
     if (status !== 'ready' || !canvasRef.current) return undefined;
     const scene = createScene(canvasRef.current);
+    eng.scene = scene;
     let raf = 0, last = performance.now(), lastUi = 0;
     const loop = (now) => {
       const dt = Math.min(0.1, (now - last) / 1000); last = now;
@@ -135,5 +139,20 @@ export function usePond(canvasRef) {
     jumpTo: (pos) => { eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); goReplay(pos); },
     toggleLive: () => (mode === 'live' ? goReplay() : goLive()),
     toggleSound: () => setSound(!sound),
+    // Clicking an animal: find which one is under the pointer and let it explain itself.
+    info,
+    closeInfo: () => setInfo(null),
+    isAnimalAt: (x, y) => Boolean(eng.scene?.hitTest(x, y)),
+    inspect: (x, y) => {
+      const hit = eng.scene?.hitTest(x, y);
+      setInfo(hit ? { x: hit.x, y: hit.y, ...describe(hit, readFrame(eng.series, eng.pos, eng.norm)) } : null);
+    },
+    // Ask the pond: answers come from the live week of readings (or the history if live is down).
+    ask: (question) => answer(question, eng.live ?? eng.hist, Boolean(eng.live)),
+    showMoment: (pos) => {
+      const live = Boolean(eng.live);
+      eng.series = eng.live ?? eng.hist; eng.pos = pos;
+      setMode(live ? 'live' : 'replay'); setPlaying(false); snapshot();
+    },
   };
 }

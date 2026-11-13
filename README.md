@@ -13,6 +13,8 @@ A living picture of Choate Pond, driven by real sensor readings, for people who 
 - Reeds bend with the wind, dragonflies come out on warm calm days, and fireflies on warm dry nights.
 - The animals are illustrations driven by the readings, not counted wildlife.
 - A plain-words message says how the pond is doing and why.
+- Click a fish, turtle or goose and it tells you what it is showing and the reading behind it.
+- Ask the pond: type a question such as "How was last night?" and the pond answers from its own readings. The answers come from rules in the code, not an AI service.
 - A calm soundscape follows the same readings (pitch is temperature, brightness is oxygen, bell notes follow pH, drips are rain).
 
 ## Run it
@@ -38,7 +40,9 @@ The page opens on the live reading from the Blue CoLab API (https://colabprod01.
 | `src/usePond.js` | One React hook that runs everything: data, live or replay mode, the playback clock |
 | `src/lib/data.js` | Loads the history, fetches live readings, reads a value at any moment |
 | `src/lib/health.js` | Turns readings into the plain-words message |
+| `src/lib/ask.js` | Ask the pond: works out when and what a question is about, then answers from the data |
 | `src/lib/scene.js` | Draws the pond on a canvas |
+| `src/lib/creatures.js` | What each animal says when clicked |
 | `src/lib/audio.js` | The soundscape (Web Audio API) |
 | `src/components/` | Header, control dock and start screen |
 | `scripts/prep_data.py` | Cleans the raw CSVs into `public/data/pond.json` |
@@ -54,6 +58,15 @@ python3 scripts/prep_data.py 150
 ```
 
 The raw files are large and are not committed. Download and unzip them into `data/raw/extract/` first.
+
+## Sources for the animal facts
+
+The animals are illustrations, and the facts are general facts about species found in New York ponds, not a survey of Choate Pond.
+
+- Canada geese (resident geese, summer molt): NYS Department of Environmental Conservation, https://dec.ny.gov/sites/default/files/2025-04/geeseproblem.pdf
+- Snapping turtle as state reptile: NYS DEC, https://dec.ny.gov/nature/animals-fish-plants/amphibians-reptiles/snapping-turtle
+- Pumpkinseed sunfish (most abundant and widespread sunfish in New York): NYS DEC freshwater sportfish brochure, https://dec.ny.gov/sites/default/files/2026-08/freshwatersportfishbrochure.pdf
+- Sunfish nesting at about 55°F: Northern Woodlands, https://northernwoodlands.org/outside_story/article/spawning-sunfish
 
 ## Built with
 
