@@ -121,6 +121,7 @@ export function usePond(canvasRef) {
 
   const setSound = useCallback((on) => {
     if (!audioRef.current) audioRef.current = createAudio(() => eng.series && readFrame(eng.series, eng.pos, eng.norm));
+    if (import.meta.env.DEV) window.__pondAudio = audioRef.current; // lets us measure loudness while developing
     audioRef.current.setOn(on); setSoundState(on);
   }, [eng]);
 
