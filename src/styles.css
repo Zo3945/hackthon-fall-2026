@@ -37,8 +37,8 @@ button[aria-pressed=true] { background:rgba(127,224,200,.22); border-color:var(-
 .bubble { position:fixed; z-index:3; background:rgba(8,28,36,.9); border:1px solid var(--accent); border-radius:14px; padding:12px 14px; font-size:14px; line-height:1.45; box-shadow:0 8px 30px rgba(0,0,0,.35); }
 .bubble-head { display:flex; justify-content:space-between; align-items:center; font-size:16px; }
 .bubble-head button { padding:3px 10px; font-size:12px; }
-.bubble-shows { color:var(--accent); font-size:12px; margin:2px 0 6px; }
-.bubble-fact { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); color:var(--ink2); font-size:13px; }
+.bubble-fact { margin-top:6px; font-size:15px; }
+.bubble-reading { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); color:var(--accent); font-size:12px; }
 
 /* Ask the pond */
 .ask-toggle { position:fixed; right:28px; top:118px; background:var(--panel); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); border-color:var(--accent); font-weight:600; }
