@@ -1,5 +1,6 @@
 // The pond's soundtrack, built with the Web Audio API. No audio files: every sound is made in code.
-// The style is slow, sparse piano with a long echo, in the spirit of calm sandbox-game music.
+// The style is slow, soft, slightly wobbly piano with a long echo and lots of silence,
+// in the spirit of calm sandbox-game music. All of it is original and generated from the data.
 // Every part follows a reading from the pond.
 //
 //   SOUND               READING              HOW
@@ -16,7 +17,7 @@
 import { clamp, lerp } from './data.js';
 
 const PENT = [0, 2, 4, 7, 9]; // major pentatonic: 1 2 3 5 6
-const STEP_MS = 850; // one slow beat
+const STEP_MS = 980; // one slow beat
 const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
 /** The i-th note of the pentatonic scale above a key note. */
 const degree = (i) => Math.floor(i / 5) * 12 + PENT[((i % 5) + 5) % 5];
@@ -29,7 +30,7 @@ function noiseBuffer(ctx) {
   return b;
 }
 /** A long, soft room: the "big empty world" echo. */
-function reverbImpulse(ctx, seconds = 5) {
+function reverbImpulse(ctx, seconds = 6.5) {
   const len = ctx.sampleRate * seconds, b = ctx.createBuffer(2, len, ctx.sampleRate);
   for (let c = 0; c < 2; c++) { const d = b.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
   return b;
@@ -52,13 +53,17 @@ export function createAudio(getFrame) {
     limiter.threshold.value = -14; limiter.ratio.value = 6; limiter.attack.value = 0.01; limiter.release.value = 0.3;
     limiter.connect(master);
     const reverb = ctx.createConvolver(); reverb.buffer = reverbImpulse(ctx);
-    const wet = ctx.createGain(); wet.gain.value = 0.7; reverb.connect(wet); wet.connect(limiter);
-    const dry = ctx.createGain(); dry.gain.value = 0.75; dry.connect(limiter);
+    const wet = ctx.createGain(); wet.gain.value = 0.95; reverb.connect(wet); wet.connect(limiter);
+    const dry = ctx.createGain(); dry.gain.value = 0.6; dry.connect(limiter);
     const bus = ctx.createGain(); bus.connect(dry); bus.connect(reverb);
 
     // Piano tone control: oxygen opens or closes this filter.
     const pianoTone = ctx.createBiquadFilter(); pianoTone.type = 'lowpass'; pianoTone.frequency.value = 2400; pianoTone.Q.value = 0.3;
     pianoTone.connect(bus);
+    // A very slow pitch wobble shared by every note, like an old tape recording.
+    const wobble = ctx.createOscillator(); wobble.frequency.value = 0.23;
+    const wow = ctx.createGain(); wow.gain.value = 5; // cents
+    wobble.connect(wow); wobble.start();
 
     // Noise layers. Each one swells slowly so it sounds like water and air, not static.
     const noise = noiseBuffer(ctx);
@@ -73,26 +78,29 @@ export function createAudio(getFrame) {
       src.connect(filter); filter.connect(level); level.connect(gain); gain.connect(bus); src.start();
       return { filter, gain };
     };
-    n = { master, bus, pianoTone, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
+    n = { master, bus, pianoTone, wow, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
 
     update(0.05);
     setInterval(tick, STEP_MS);
   }
 
   /**
-   * A soft piano note: a stack of sine waves (the note plus its overtones).
+   * A soft, felt-covered piano note: a stack of sine waves (the note plus its overtones).
    * Higher overtones are quieter and fade faster, which is what makes a piano sound like a piano.
+   * The main tone is doubled slightly out of tune, which makes it warm instead of clinical.
    */
   function piano(note, vol, delay = 0) {
     const t = ctx.currentTime + delay, freq = midi(note);
-    const dur = clamp(5.5 - (note - 48) * 0.06, 2, 6); // low notes ring longer
+    const dur = clamp(6.5 - (note - 48) * 0.07, 2.5, 7); // low notes ring longer
     const out = ctx.createGain(); out.gain.value = vol; out.connect(n.pianoTone);
-    [[1, 1, 1], [2, 0.42, 0.55], [3, 0.2, 0.35], [4.02, 0.1, 0.22], [5.03, 0.05, 0.15]].forEach(([mult, amp, life]) => {
+    // [overtone, loudness, how long it lasts, detune in cents]
+    [[1, 1, 1, -3], [1, 0.6, 1, 4], [2, 0.3, 0.5, 0], [3, 0.1, 0.3, 0], [4.02, 0.04, 0.2, 0]].forEach(([mult, amp, life, cents]) => {
       const osc = ctx.createOscillator(), env = ctx.createGain();
-      osc.frequency.value = freq * mult * (1 + (Math.random() - 0.5) * 0.0015); // tiny detune, like real strings
+      osc.frequency.value = freq * mult; osc.detune.value = cents;
+      n.wow.connect(osc.detune);
       env.gain.setValueAtTime(0, t);
-      env.gain.linearRampToValueAtTime(amp, t + 0.012); // soft hammer
-      env.gain.exponentialRampToValueAtTime(amp * 0.35, t + 0.25 * life + 0.05); // quick first drop
+      env.gain.linearRampToValueAtTime(amp, t + 0.03); // soft hammer
+      env.gain.exponentialRampToValueAtTime(amp * 0.4, t + 0.3 * life + 0.06); // quick first drop
       env.gain.exponentialRampToValueAtTime(0.0001, t + dur * life); // long tail
       osc.connect(env); env.connect(out);
       osc.start(t); osc.stop(t + dur * life + 0.1);
@@ -109,7 +117,7 @@ export function createAudio(getFrame) {
 
     // Temperature picks the key: 1°C sits around A, 25°C is seven semitones higher.
     const key = Math.round(45 + clamp(((f.temp ?? 12) - 1) / 24, 0, 1) * 7);
-    n.pianoTone.frequency.setTargetAtTime(700 + 3200 * oxy, now, glide);
+    n.pianoTone.frequency.setTargetAtTime(600 + 2000 * oxy, now, glide);
 
     n.wash.gain.gain.setTargetAtTime(0.02 + murk * 0.2, now, glide);
     n.wash.filter.frequency.setTargetAtTime(520 - murk * 260, now, glide);
@@ -138,11 +146,15 @@ export function createAudio(getFrame) {
         if (chance(0.25 * oxy)) piano(key + 12 + degree(melody + 1), 0.11, STEP_MS / 2000); // a quick in-between note
       }
       phraseLeft--;
-      if (phraseLeft === 0) rest = Math.round(lerp(7, 3, oxy) + Math.random() * 3); // less oxygen = longer silences
+      if (phraseLeft === 0) {
+        if (chance(0.6)) piano(key + 12 + degree(chance(0.5) ? 5 : 7), 0.14, STEP_MS / 1000); // settle on a home note
+        rest = Math.round(lerp(8, 4, oxy) + Math.random() * 3); // less oxygen = longer silences
+      }
     } else if (--rest <= 0) {
       phraseLeft = Math.round(2 + oxy * 4 + Math.random() * 2);
-      piano(key + degree(chance(0.7) ? 0 : 3), 0.2); // a low note opens each phrase
-      if (chance(0.5)) piano(key + 7, 0.1, 0.04);
+      // The left hand opens each phrase with a slow, rolled chord: home note, fifth, then a note on top.
+      const beat = STEP_MS / 1000, top = chance(0.5) ? 14 : 16;
+      piano(key, 0.2); piano(key + 7, 0.14, beat * 0.5); piano(key + top, 0.13, beat);
     }
 
     // Rain: high, short piano drips.
