@@ -1,0 +1,138 @@
+#!/usr/bin/env python3
+"""Clean Blue CoLab Choate Pond data into one small hourly JSON for the web app.
+
+Water: Alan (pond sonde). Weather: Odin (rain, wind). Real data only.
+Cleaning: hourly means, impossible values dropped, spikes (sensor, not pond)
+removed with a rolling-median filter, short gaps interpolated, long gaps left null.
+"""
+import csv, glob, json, os, statistics, sys
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+
+RAW = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "extract")
+OUT = os.path.join(os.path.dirname(__file__), "..", "public", "data", "pond.json")
+DAYS = int(sys.argv[1]) if len(sys.argv) > 1 else 120
+
+WATER = {"Temp": (0, 40), "DOpct": (1, 200), "Turb": (0.05, 1000), "pH": (4, 10), "Cond": (50, 3000)}
+WEATHER = {"Rain": None, "WindSpeed": (0, 150), "AirTemp": (-30, 45)}
+
+
+def hour_key(ts):
+    # "2026-01-01 00:15:00.000 -0500" -> UTC hour bucket
+    dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S.%f %z").astimezone(timezone.utc)
+    return dt.replace(minute=0, second=0, microsecond=0)
+
+
+def read_hourly(files, cols, limits, agg):
+    buckets = defaultdict(lambda: defaultdict(list))
+    for f in files:
+        with open(f, newline="") as fh:
+            for row in csv.DictReader(fh):
+                try:
+                    k = hour_key(row["time"])
+                except (ValueError, KeyError):
+                    continue
+                for c in cols:
+                    v = row.get(c, "")
+                    if v in ("", None):
+                        continue
+                    try:
+                        x = float(v)
+                    except ValueError:
+                        continue
+                    lim = limits.get(c)
+                    if lim and not (lim[0] <= x <= lim[1]):
+                        continue
+                    buckets[k][c].append(x)
+    out = {}
+    for k, d in buckets.items():
+        out[k] = {c: (agg[c](v)) for c, v in d.items() if v}
+    return out
+
+
+def despike(vals, win=5, k=4.0, floor=0.0):
+    """Null out points far from the rolling median (sensor glitches)."""
+    n = len(vals)
+    res = list(vals)
+    for i in range(n):
+        if vals[i] is None:
+            continue
+        w = [v for v in vals[max(0, i - win): i + win + 1] if v is not None]
+        if len(w) < 4:
+            continue
+        med = statistics.median(w)
+        mad = statistics.median([abs(v - med) for v in w]) or 1e-9
+        if abs(vals[i] - med) > max(k * 1.4826 * mad * 3, floor):
+            res[i] = None
+    return res
+
+
+def fill_short(vals, max_gap=6):
+    n = len(vals)
+    res = list(vals)
+    i = 0
+    while i < n:
+        if res[i] is None:
+            j = i
+            while j < n and res[j] is None:
+                j += 1
+            if i > 0 and j < n and (j - i) <= max_gap:
+                a, b = res[i - 1], res[j]
+                for t in range(i, j):
+                    res[t] = a + (b - a) * (t - i + 1) / (j - i + 1)
+            i = j
+        else:
+            i += 1
+    return res
+
+
+def main():
+    mean = lambda v: sum(v) / len(v)
+    water = read_hourly(sorted(glob.glob(f"{RAW}/alan/alan/alan 20*.csv")),
+                        list(WATER), WATER, {c: mean for c in WATER})
+    weather = read_hourly(sorted(glob.glob(f"{RAW}/odin/odin/odin 202[456].csv")),
+                          list(WEATHER), WEATHER,
+                          {"Rain": sum, "WindSpeed": mean, "AirTemp": mean})
+    end = max(water)
+    start = end - timedelta(days=DAYS)
+    hours = []
+    t = start.replace(minute=0)
+    while t <= end:
+        hours.append(t)
+        t += timedelta(hours=1)
+
+    cols = {}
+    floors = {"Temp": 1.5, "DOpct": 15, "Turb": 40, "pH": 0.35, "Cond": 120}
+    for c in WATER:
+        raw = [water.get(h, {}).get(c) for h in hours]
+        cols[c] = fill_short(despike(raw, floor=floors[c]))
+    for c in ("Rain", "WindSpeed", "AirTemp"):
+        raw = [weather.get(h, {}).get(c) for h in hours]
+        cols[c] = fill_short(raw, 12) if c != "Rain" else [0 if v is None else v for v in raw]
+
+    def r(v, d=2):
+        return None if v is None else round(v, d)
+
+    data = {
+        "station": "Alan, Choate Pond, Pace University Pleasantville",
+        "source": "Blue CoLab flat files (github.com/bluecolab/data-repo)",
+        "start": hours[0].isoformat(),
+        "stepHours": 1,
+        "columns": ["Temp", "DOpct", "Turb", "pH", "Cond", "Rain", "WindSpeed", "AirTemp"],
+        "rows": [[r(cols[c][i], 3 if c == "pH" else 2) for c in
+                  ["Temp", "DOpct", "Turb", "pH", "Cond", "Rain", "WindSpeed", "AirTemp"]]
+                 for i in range(len(hours))],
+    }
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    with open(OUT, "w") as f:
+        json.dump(data, f, separators=(",", ":"))
+    print(f"{len(hours)} hours, {hours[0]} .. {hours[-1]}")
+    for i, c in enumerate(data["columns"]):
+        v = [row[i] for row in data["rows"] if row[i] is not None]
+        miss = 100 * (1 - len(v) / len(hours))
+        print(f"{c:10s} min {min(v):8.2f} max {max(v):8.2f} missing {miss:4.1f}%")
+    print("size KB:", os.path.getsize(OUT) // 1024)
+
+
+if __name__ == "__main__":
+    main()
