@@ -30,6 +30,7 @@ export function usePond(canvasRef) {
   const [started, setStarted] = useState(false);
   const [sound, setSoundState] = useState(false);
   const [events, setEvents] = useState([]);
+  const [activeEvent, setActiveEvent] = useState(null); // which Jump to button is showing, if any
   const [info, setInfo] = useState(null); // speech bubble for a clicked animal
   const [view, setView] = useState(null); // snapshot for the UI, refreshed a few times a second
 
@@ -129,7 +130,12 @@ export function usePond(canvasRef) {
   }, [mode, eng]);
 
   const setSound = useCallback((on) => {
-    if (!audioRef.current) audioRef.current = createAudio(() => eng.series && readFrame(eng.series, eng.pos, eng.norm));
+    if (!audioRef.current) {
+      audioRef.current = createAudio(
+        () => eng.series && readFrame(eng.series, eng.pos, eng.norm),
+        (note, vol) => eng.scene?.pulse(note, vol), // every piano note ripples the water
+      );
+    }
     if (import.meta.env.DEV) window.__pondAudio = audioRef.current; // lets us measure loudness while developing
     audioRef.current.setOn(on); setSoundState(on);
   }, [eng]);
@@ -137,12 +143,13 @@ export function usePond(canvasRef) {
   return {
     status, mode, liveFailed, connecting, playing, speed, started, sound, events, view,
     start: (withSound) => { eng.started = true; setStarted(true); if (withSound) setSound(true); },
-    togglePlay: () => setPlaying(!eng.playing),
+    activeEvent,
+    togglePlay: () => { setActiveEvent(null); setPlaying(!eng.playing); },
     cycleSpeed: () => { eng.speed = (eng.speed + 1) % SPEEDS.length; setSpeedState(eng.speed); },
-    scrub: (fraction) => { eng.pos = clamp(fraction, 0, 1) * (eng.series.n - 1); snapshot(); },
+    scrub: (fraction) => { setActiveEvent(null); eng.pos = clamp(fraction, 0, 1) * (eng.series.n - 1); snapshot(); },
     // Jumping to a moment holds it on screen. Press Play to watch what happened next.
-    jumpTo: (pos) => { eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); goReplay(pos, false); },
-    toggleLive: () => (mode === 'live' ? goReplay() : goLive()),
+    jumpTo: (pos, label) => { eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); goReplay(pos, false); setActiveEvent(label); },
+    toggleLive: () => { setActiveEvent(null); return mode === 'live' ? goReplay() : goLive(); },
     toggleSound: () => setSound(!sound),
     // Clicking an animal: find which one is under the pointer and let it explain itself.
     info,

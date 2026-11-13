@@ -28,4 +28,6 @@ export function health({ temp, doPct, turb, ph, rain }) {
 }
 
 export const cloudiness = (v) => (v < 5 ? 'Clear' : v < 15 ? 'Slightly cloudy' : v < 40 ? 'Cloudy' : 'Murky');
+// Conductivity in µS/cm. The cut-offs are our own plain-words labels for a freshwater pond.
+export const saltiness = (v) => (v < 300 ? 'Low' : v < 800 ? 'Normal' : v < 1500 ? 'Salty' : 'Very salty');
 export const toF = (c) => (c * 9) / 5 + 32;

@@ -1,11 +1,12 @@
 import { SPEEDS } from '../usePond.js';
-import { cloudiness, toF } from '../lib/health.js';
+import { cloudiness, saltiness, toF } from '../lib/health.js';
 
 const READINGS = [
   ['Water temperature', (f) => f.temp, (v) => `${toF(v).toFixed(0)}°F (${v.toFixed(1)}°C)`],
   ['Oxygen', (f) => f.doPct, (v) => `${v.toFixed(0)}% saturated`],
   ['Cloudiness', (f) => f.turb, cloudiness],
   ['Acidity (pH)', (f) => f.ph, (v) => v.toFixed(1)],
+  ['Salt in the water', (f) => f.cond, (v) => `${saltiness(v)} (${v.toFixed(0)} µS/cm)`],
   ['Rain this hour', (f) => f.rain, (v) => (v < 0.05 ? 'None' : `${v.toFixed(1)} mm`)],
   ['Air temperature', (f) => f.air, (v) => `${toF(v).toFixed(0)}°F`],
 ];
@@ -18,7 +19,7 @@ export default function Dock({ pond }) {
         <button aria-pressed={mode === 'live'} onClick={pond.toggleLive}>
           {connecting ? 'Connecting…' : mode === 'live' ? 'Live' : 'Live now'}
         </button>
-        <button className="primary" onClick={pond.togglePlay}>{pond.playing ? 'Pause' : 'Play'}</button>
+        <button className="primary" aria-pressed={pond.playing} onClick={pond.togglePlay}>{pond.playing ? 'Pause' : 'Play'}</button>
         <input
           className="scrub" type="range" min="0" max="1000" aria-label="Time"
           value={Math.round(view.progress * 1000)}
@@ -30,7 +31,7 @@ export default function Dock({ pond }) {
       <div className="events">
         <span>Jump to:</span>
         {pond.events.map((e) => (
-          <button key={e.label} onClick={() => pond.jumpTo(e.pos)}>{e.label}</button>
+          <button key={e.label} aria-pressed={pond.activeEvent === e.label} onClick={() => pond.jumpTo(e.pos, e.label)}>{e.label}</button>
         ))}
       </div>
       <div className="reads">

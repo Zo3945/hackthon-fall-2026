@@ -11,6 +11,7 @@
 //   low water wash      turbidity            murkier water = louder, deeper wash
 //   airy hiss           wind                 more wind = louder, higher hiss
 //   high piano drips    rain                 more rain = more drips
+//   silence             a gap in the data    when the sensor is offline, the piano stops
 //
 // Notes snap to a pentatonic scale so it always sounds like music, not an alarm.
 
@@ -37,7 +38,7 @@ function reverbImpulse(ctx, seconds = 6.5) {
 }
 
 /** getFrame() returns the current readings (see readFrame in data.js). */
-export function createAudio(getFrame) {
+export function createAudio(getFrame, onNote) {
   let ctx = null, on = false, n = null, meter = null;
   // Melody state: where the piano is, how many notes are left in the phrase, how long to rest.
   let melody = 7, phraseLeft = 0, rest = 2, step = 0;
@@ -91,6 +92,8 @@ export function createAudio(getFrame) {
    */
   function piano(note, vol, delay = 0) {
     const t = ctx.currentTime + delay, freq = midi(note);
+    // Tell the scene a note is sounding, so the water can ripple in time with the music.
+    if (onNote && vol >= 0.09) setTimeout(() => on && onNote(note, vol), delay * 1000);
     const dur = clamp(6.5 - (note - 48) * 0.07, 2.5, 7); // low notes ring longer
     const out = ctx.createGain(); out.gain.value = vol; out.connect(n.pianoTone);
     // [overtone, loudness, how long it lasts, detune in cents]
@@ -132,6 +135,7 @@ export function createAudio(getFrame) {
     if (!state) return;
     const { f, oxy, key } = state;
     step++;
+    if (f.gap) { phraseLeft = 0; return; } // sensor offline: a gap in the data is a silence in the music
 
     // The piano plays short phrases with silence between them.
     if (phraseLeft > 0) {

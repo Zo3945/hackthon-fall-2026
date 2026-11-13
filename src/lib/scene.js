@@ -6,6 +6,7 @@
 //   geese        = leave when the water is near freezing, shelter from wind and rain
 //   turtles      = bask on the log when warm and sunny, sink and rest when cold
 //   reeds        = bend with the wind
+//   rings of light = each piano note as it plays
 //   dragonflies  = warm, calm, dry days   fireflies = warm, dry nights
 
 import { clamp, lerp } from './data.js';
@@ -45,6 +46,7 @@ export function createScene(canvas) {
   const fireflies = Array.from({ length: 16 }, () => ({ x: Math.random(), y: Math.random(), phase: Math.random() * TAU, speed: 0.5 + Math.random() }));
   let dragonflyAlpha = 0, fireflyAlpha = 0;
   let dropDebt = 0, flash = 0, bolt = null, nextStrike = 0; // rain and lightning state
+  const pulses = []; // rings of light on the water, one per piano note
   let selected = null, selectedHit = null; // the animal the visitor clicked, if any
   const hits = []; // where each animal was drawn this frame, so clicks can find them
 
@@ -188,6 +190,16 @@ export function createScene(canvas) {
     }
 
     // Lily pads: more when warm and calm
+    // Each piano note spreads a ring of light across the surface: low notes on the left, high on the right
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      const p = pulses[i]; p.r += 110 * DPR * dt; p.a -= 0.42 * dt;
+      if (p.a <= 0) { pulses.splice(i, 1); continue; }
+      const px = p.x * W, py = horizon + H * 0.035;
+      g.fillStyle = `rgba(190,255,235,${p.a * 0.1})`; g.beginPath(); g.ellipse(px, py, p.r, p.r * 0.26, 0, 0, TAU); g.fill();
+      g.strokeStyle = `rgba(190,255,235,${p.a * 0.85})`; g.lineWidth = 2 * DPR;
+      g.beginPath(); g.ellipse(px, py, p.r, p.r * 0.26, 0, 0, TAU); g.stroke();
+    }
+
     // Lily pads die back in cold water and spread as it warms
     const padCount = (f.temp ?? 12) < 8 ? 0 : Math.max(1, Math.round((tN - 0.2) * 7 - windN * 2));
     for (let i = 0; i < padCount; i++) {
@@ -389,6 +401,7 @@ export function createScene(canvas) {
   const toCss = (h) => h && { ...h, x: h.x / DPR, y: h.y / DPR };
 
   return {
+    pulse: (note, vol) => { if (pulses.length < 40) pulses.push({ x: clamp((note - 42) / 46, 0.06, 0.94), r: 4 * DPR, a: Math.min(1, vol * 5) }); },
     setSelected: (hit) => { selected = hit && { kind: hit.kind, id: hit.id }; },
     selectedHit: () => toCss(selectedHit), // where the clicked animal is right now
     draw, hitTest, destroy: () => window.removeEventListener('resize', resize),

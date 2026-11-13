@@ -86,6 +86,7 @@ export function readFrame(series, pos, norm) {
     doPct: series.val('DOpct', pos),
     turb: series.val('Turb', pos),
     ph: series.val('pH', pos),
+    cond: series.val('Cond', pos), // conductivity: how much salt and minerals are dissolved in the water
     rain: series.val('Rain', pos) ?? 0,
     lightning: series.col('Lightning')[clamp(Math.round(pos), 0, series.n - 1)] ?? 0, // strikes counted this hour
     air: series.val('AirTemp', pos),

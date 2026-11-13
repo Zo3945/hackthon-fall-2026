@@ -21,9 +21,14 @@ body { background:#06161d; color:var(--ink); font-family:-apple-system,BlinkMacS
 .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
 .scrub { flex:1; min-width:180px; accent-color:var(--accent); height:28px; cursor:pointer; }
 button { font:inherit; color:var(--ink); background:rgba(255,255,255,.08); border:1px solid var(--line); border-radius:999px; padding:8px 16px; cursor:pointer; font-size:14px; }
+button { transition:background .15s, border-color .15s, transform .08s, box-shadow .15s; }
 button:hover { background:rgba(255,255,255,.16); }
+button:active { transform:scale(.95); }
 button.primary { background:var(--accent); color:#06312a; border-color:transparent; font-weight:600; }
-button[aria-pressed=true] { background:rgba(127,224,200,.22); border-color:var(--accent); }
+button[aria-pressed=true] { background:rgba(127,224,200,.22); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+button.primary[aria-pressed=true] { background:var(--accent); box-shadow:0 0 14px rgba(127,224,200,.55); }
+button.primary[aria-pressed=false] { background:rgba(127,224,200,.75); }
+button.primary:hover { background:#9aecd8; }
 .events { margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center; font-size:13px; color:var(--ink2); }
 .reads { margin-top:10px; display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px 14px; font-size:13px; color:var(--ink2); }
 .reads b { display:block; color:var(--ink); font-size:15px; font-weight:600; }
@@ -39,6 +44,9 @@ button[aria-pressed=true] { background:rgba(127,224,200,.22); border-color:var(-
 .bubble-head button { padding:3px 10px; font-size:12px; }
 .bubble-fact { margin-top:6px; font-size:15px; }
 .bubble-reading { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); color:var(--accent); font-size:12px; }
+
+/* Start screen theme line */
+.theme { font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
 
 @media (max-width:640px) {
   .top { padding:14px; }
