@@ -19,7 +19,9 @@ A living picture of Choate Pond, driven by real sensor readings, for people who 
 - Click a fish, turtle, goose or rain cloud to see a short fact and the live reading it stands for. The clicked one is highlighted and its bubble follows it.
 - A slow piano follows the same readings: warmer water plays in a higher key, more oxygen means fuller phrases and a brighter tone, pH sets how high the melody sits, and rain adds high drips.
 - Jump buttons hold on real moments in the recorded data: the biggest storm, the warmest water, the lowest oxygen, the murkiest water, the coldest day and a snow day.
-- Lightning flashes only in hours when the weather station counted strikes.
+- Lightning flashes only in hours when the weather station counted strikes. Thunder follows each flash.
+- Wind streaks, leaning reeds, drifting clouds and slanted rain all follow the station's wind direction. The view is drawn looking north, so wind from the west moves left to right.
+- Clear nights show stars and the moon in its real phase, worked out from the date (not a sensor). Warm, dry nights add crickets, which chirp faster in warmer air, and the odd frog.
 
 ## Run it
 

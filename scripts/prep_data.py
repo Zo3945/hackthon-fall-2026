@@ -5,7 +5,7 @@ Water: Alan (pond sonde). Weather: Odin (rain, wind). Real data only.
 Cleaning: hourly means, impossible values dropped, spikes (sensor, not pond)
 removed with a rolling-median filter, short gaps interpolated, long gaps left null.
 """
-import csv, glob, json, os, statistics, sys
+import csv, glob, json, math, os, statistics, sys
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 
@@ -14,7 +14,14 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "public", "data", "pond.json
 DAYS = int(sys.argv[1]) if len(sys.argv) > 1 else 120
 
 WATER = {"Temp": (0, 40), "DOpct": (1, 200), "Turb": (0.05, 1000), "pH": (4, 10), "Cond": (50, 3000)}
-WEATHER = {"Rain": None, "WindSpeed": (0, 150), "AirTemp": (-30, 45), "LightningStrikes": (0, 5000)}
+WEATHER = {"Rain": None, "WindSpeed": (0, 150), "AirTemp": (-30, 45), "LightningStrikes": (0, 5000), "WindDir": (0, 360)}
+
+
+def mean_direction(degrees):
+    """Average of compass directions. 350 and 10 average to 0 (north), not 180."""
+    x = sum(math.sin(math.radians(d)) for d in degrees)
+    y = sum(math.cos(math.radians(d)) for d in degrees)
+    return math.degrees(math.atan2(x, y)) % 360
 
 
 def hour_key(ts):
@@ -104,7 +111,7 @@ def main():
                         list(WATER), WATER, {c: mean for c in WATER})
     weather = read_hourly(sorted(glob.glob(f"{RAW}/odin/odin/odin 202[456].csv")),
                           list(WEATHER), WEATHER,
-                          {"Rain": sum, "WindSpeed": mean, "AirTemp": mean, "LightningStrikes": sum})
+                          {"Rain": sum, "WindSpeed": mean, "AirTemp": mean, "LightningStrikes": sum, "WindDir": mean_direction})
     end = max(water)
     start = end - timedelta(days=DAYS)
     hours = []
@@ -125,6 +132,8 @@ def main():
         cols[c] = fill_short(raw, 12) if c != "Rain" else [0 if v is None else v for v in raw]
     # Lightning strikes counted by the weather station in each hour (0 when none or no data)
     cols["Lightning"] = [weather.get(h, {}).get("LightningStrikes") or 0 for h in hours]
+    # Compass direction the wind is blowing from (0 = north, 90 = east)
+    cols["WindDir"] = [weather.get(h, {}).get("WindDir") for h in hours]
 
     def r(v, d=2):
         return None if v is None else round(v, d)
@@ -134,9 +143,9 @@ def main():
         "source": "Blue CoLab flat files (github.com/bluecolab/data-repo)",
         "start": hours[0].isoformat(),
         "stepHours": 1,
-        "columns": ["Temp", "DOpct", "Turb", "pH", "Cond", "Rain", "WindSpeed", "AirTemp", "Lightning"],
+        "columns": ["Temp", "DOpct", "Turb", "pH", "Cond", "Rain", "WindSpeed", "AirTemp", "Lightning", "WindDir"],
         "rows": [[r(cols[c][i], 3 if c == "pH" else 2) for c in
-                  ["Temp", "DOpct", "Turb", "pH", "Cond", "Rain", "WindSpeed", "AirTemp", "Lightning"]]
+                  ["Temp", "DOpct", "Turb", "pH", "Cond", "Rain", "WindSpeed", "AirTemp", "Lightning", "WindDir"]]
                  for i in range(len(hours))],
     }
     os.makedirs(os.path.dirname(OUT), exist_ok=True)

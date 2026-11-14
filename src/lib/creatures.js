@@ -68,6 +68,17 @@ export function describe(hit, f) {
   const id = hit.id ?? 0;
   const water = f.temp == null ? 'no reading' : deg(f.temp);
 
+  if (hit.kind === 'moon') {
+    const p = hit.phase;
+    const name = p < 0.03 || p > 0.97 ? 'New moon' : p < 0.22 ? 'Waxing crescent' : p < 0.28 ? 'First quarter' : p < 0.47 ? 'Waxing gibbous'
+      : p < 0.53 ? 'Full moon' : p < 0.72 ? 'Waning gibbous' : p < 0.78 ? 'Last quarter' : 'Waning crescent';
+    return {
+      title: 'The moon',
+      fact: 'The moon takes about a month to go from new to full and back again.',
+      reading: `${name}, ${(hit.lit * 100).toFixed(0)}% lit. Worked out from the date, not from a pond sensor.`,
+    };
+  }
+
   if (hit.kind === 'cloud') {
     const rain = f.rain ?? 0;
     const snow = rain >= 0.05 && (f.air ?? 10) <= 0.5; // below freezing, it falls as snow

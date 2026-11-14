@@ -90,7 +90,7 @@ export function usePond(canvasRef) {
   // Animation loop: move the clock, draw the scene, refresh the UI snapshot.
   useEffect(() => {
     if (status !== 'ready' || !canvasRef.current) return undefined;
-    const scene = createScene(canvasRef.current);
+    const scene = createScene(canvasRef.current, { onStrike: () => audioRef.current?.thunder() });
     eng.scene = scene;
     let raf = 0, last = performance.now(), lastUi = 0;
     const loop = (now) => {

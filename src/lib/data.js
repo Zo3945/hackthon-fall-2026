@@ -1,6 +1,6 @@
 // Pond data: loading, live fetching, and reading values at any point in time.
 
-export const COLS = ['Temp', 'DOpct', 'Turb', 'pH', 'Cond', 'Rain', 'WindSpeed', 'AirTemp', 'Lightning'];
+export const COLS = ['Temp', 'DOpct', 'Turb', 'pH', 'Cond', 'Rain', 'WindSpeed', 'AirTemp', 'Lightning', 'WindDir'];
 const COUNTED = ['Rain', 'Lightning']; // added up per hour, where the others are averaged
 export const HOUR = 3600000;
 
@@ -10,7 +10,7 @@ export const lerp = (a, b, t) => a + (b - a) * t;
 // Values outside these ranges are sensor faults, not the pond.
 const LIMITS = {
   Temp: [0, 40], DOpct: [1, 200], Turb: [0.05, 1000], pH: [4, 10],
-  Cond: [50, 3000], WindSpeed: [0, 150], AirTemp: [-30, 45],
+  Cond: [50, 3000], WindSpeed: [0, 150], AirTemp: [-30, 45], WindDir: [0, 360],
 };
 
 /** Hourly rows of readings, with smooth lookups between hours. */
@@ -81,6 +81,9 @@ export function n01(norm, c, v) {
 /** Everything the scene, the sound and the text need for one moment. */
 export function readFrame(series, pos, norm) {
   const wind = series.val('WindSpeed', pos);
+  const hour = clamp(Math.round(pos), 0, series.n - 1);
+  const dirs = series.col('WindDir');
+  const windDir = dirs[hour] ?? series.nearest(dirs, hour); // not blended between hours: 350 to 10 must not pass through south
   return {
     temp: series.val('Temp', pos),
     doPct: series.val('DOpct', pos),
@@ -92,6 +95,9 @@ export function readFrame(series, pos, norm) {
     air: series.val('AirTemp', pos),
     wind,
     windN: n01(norm, 'WindSpeed', wind),
+    windDir, // compass direction the wind blows FROM, in degrees (0 = north, 90 = east)
+    // The scene looks north across the pond, so east is to the right. +1 = blowing left to right.
+    windX: windDir == null ? 1 : -Math.sin((windDir * Math.PI) / 180),
     timeMs: series.timeAt(pos),
     gap: series.isGap(pos),
   };
@@ -134,7 +140,7 @@ export async function fetchLive() {
     }
   };
   add(water, ['Temp', 'DOpct', 'Turb', 'pH', 'Cond'], true);
-  add(weather, ['Rain', 'WindSpeed', 'AirTemp', 'Lightning'], false);
+  add(weather, ['Rain', 'WindSpeed', 'AirTemp', 'Lightning', 'WindDir'], false);
   if (!Number.isFinite(lo)) throw new Error('no live water data');
 
   const rows = [];
@@ -144,6 +150,10 @@ export async function fetchLive() {
       const v = b[c];
       if (!v?.length) return COUNTED.includes(c) ? 0 : null;
       const sum = v.reduce((a, x) => a + x, 0);
+      if (c === 'WindDir') { // average of compass directions: 350 and 10 make north, not south
+        const x = v.reduce((a, d) => a + Math.sin((d * Math.PI) / 180), 0), y = v.reduce((a, d) => a + Math.cos((d * Math.PI) / 180), 0);
+        return ((Math.atan2(x, y) * 180) / Math.PI + 360) % 360;
+      }
       return COUNTED.includes(c) ? sum : sum / v.length;
     }));
   }

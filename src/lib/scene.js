@@ -6,6 +6,8 @@
 //   geese        = leave when the water is near freezing, shelter from wind and rain
 //   turtles      = bask on the log when warm and sunny, sink and rest when cold
 //   reeds        = bend with the wind, turn dry and tan in cold water
+//   wind streaks = cross the screen from the direction the wind is really blowing (the view looks north)
+//   stars, moon  = clear nights; the moon's phase is worked out from the date
 //   winter       = frosty hills and a pale sun when the air is below freezing, ice as the water nears freezing,
 //                  snow when it rains below freezing
 //   rings of light = each piano note as it plays
@@ -19,7 +21,7 @@ const TAU = Math.PI * 2;
 
 // Where the sun is for Pleasantville, NY: 0 at sunrise, 1 at sunset, outside that at night.
 // Day length swings from about 9 hours in December to 15 in June.
-function sunPosition(ms) {
+export function sunPosition(ms) {
   const d = new Date(ms);
   const m = d.getUTCMonth();
   const dst = (m > 2 && m < 10) || (m === 2 && d.getUTCDate() >= 8);
@@ -30,7 +32,15 @@ function sunPosition(ms) {
   return (hour - (noon - halfDay)) / (2 * halfDay);
 }
 
-export function createScene(canvas) {
+// The moon's phase, worked out from the date: 0 = new, 0.5 = full, back to new at 1.
+// One cycle takes 29.53 days. January 6, 2000 was a new moon.
+export function moonPhase(ms) {
+  const cycle = 29.530588853, days = (ms - Date.UTC(2000, 0, 6, 18, 14)) / 86400000;
+  return (((days % cycle) + cycle) % cycle) / cycle;
+}
+
+/** hooks.onStrike() is called each time lightning flashes, so the sound can thunder with it. */
+export function createScene(canvas, hooks = {}) {
   const g = canvas.getContext('2d');
   let W = 0, H = 0, DPR = 1, T = 0;
 
@@ -48,6 +58,9 @@ export function createScene(canvas) {
   const fireflies = Array.from({ length: 16 }, () => ({ x: Math.random(), y: Math.random(), phase: Math.random() * TAU, speed: 0.5 + Math.random() }));
   let dragonflyAlpha = 0, fireflyAlpha = 0;
   let dropDebt = 0, flash = 0, bolt = null, nextStrike = 0; // rain and lightning state
+  const stars = Array.from({ length: 80 }, () => ({ x: Math.random(), y: Math.random() * 0.8, size: 0.6 + Math.random() * 1.3, phase: Math.random() * TAU }));
+  const gusts = []; // streaks of wind crossing the scene
+  let gustDebt = 0;
   const pulses = []; // rings of light on the water, one per piano note
   let selected = null, selectedHit = null; // the animal the visitor clicked, if any
   const hits = []; // where each animal was drawn this frame, so clicks can find them
@@ -123,14 +136,36 @@ export function createScene(canvas) {
     gr.addColorStop(1, rgb(mix(mix([16, 30, 58], [196, 222, 236], day * (1 - rainN * 0.55 - stormN * 0.3)), [226, 232, 238], frost * 0.6 * day)));
     g.fillStyle = gr; g.fillRect(0, 0, W, horizon);
 
+    // Which way the wind blows across the screen. The view looks north, so wind from the west moves left to right.
+    const windX = f.windX ?? 1, windSign = windX >= 0 ? 1 : -1;
+
+    // Stars on clear nights
+    const starry = clamp(1 - day / 0.3, 0, 1) * (1 - rainN);
+    if (starry > 0.02) {
+      for (const s of stars) {
+        g.fillStyle = `rgba(255,255,255,${starry * (0.45 + 0.4 * Math.sin(T * 1.3 + s.phase))})`;
+        g.beginPath(); g.arc(s.x * W, s.y * horizon, s.size * DPR, 0, TAU); g.fill();
+      }
+    }
+
     // Sun or moon
     const sunT = clamp(sun, 0, 1);
     if (sun > 0 && sun < 1) {
       g.fillStyle = rgb(mix([255, 236, 170], [250, 248, 238], frost), (0.9 - frost * 0.25) * (1 - rainN)); // a pale winter sun
       g.beginPath(); g.arc(W * (0.12 + 0.76 * sunT), horizon * (0.85 - 0.6 * Math.sin(sunT * Math.PI)), H * 0.035, 0, TAU); g.fill();
     } else {
-      g.fillStyle = `rgba(235,240,255,${0.85 * (1 - rainN)})`;
-      g.beginPath(); g.arc(W * 0.82, horizon * 0.3, H * 0.025, 0, TAU); g.fill();
+      // The moon, lit the way it really is tonight
+      const phase = moonPhase(f.timeMs), mx = W * 0.82, my = horizon * 0.3, mr = H * 0.028;
+      const lit = (1 - Math.cos(phase * TAU)) / 2; // share of the face that is lit
+      g.save(); g.translate(mx, my); g.globalAlpha = 1 - rainN;
+      if (phase > 0.5) g.scale(-1, 1); // waning: the lit side is on the left
+      g.fillStyle = 'rgba(70,80,110,.55)'; g.beginPath(); g.arc(0, 0, mr, 0, TAU); g.fill(); // the dark side
+      const waxing = phase > 0.5 ? 1 - phase : phase; // 0 new .. 0.5 full
+      g.fillStyle = 'rgba(238,242,255,.95)';
+      g.beginPath(); g.arc(0, 0, mr, -Math.PI / 2, Math.PI / 2); // the lit edge, on the right
+      g.ellipse(0, 0, mr * Math.abs(Math.cos(waxing * TAU)), mr, 0, Math.PI / 2, -Math.PI / 2, waxing < 0.25); // the curved shadow line
+      g.fill(); g.restore(); g.globalAlpha = 1;
+      if (rainN < 0.5) hits.push({ kind: 'moon', id: 0, phase, lit, x: mx, y: my, r: mr * 1.5 });
     }
 
     // Far bank
@@ -145,7 +180,7 @@ export function createScene(canvas) {
       const shade = Math.round(58 - stormN * 22);
       g.fillStyle = `rgba(${shade - 12},${shade - 6},${shade + 6},${Math.min(0.92, 0.35 + rainN * 0.55)})`;
       for (let i = 0; i < 9; i++) {
-        const cx = (((i * 0.137 + T * (0.004 + windN * 0.012)) % 1.3) - 0.15) * W;
+        const cx = (((((i * 0.137 + windSign * T * (0.004 + windN * 0.012)) % 1.3) + 1.3) % 1.3) - 0.15) * W; // clouds drift with the wind
         const cy = horizon * (0.06 + (0.2 + stormN * 0.15) * ((i * 0.61) % 1));
         g.beginPath();
         g.ellipse(cx, cy, W * 0.2, horizon * 0.15, 0, 0, TAU);
@@ -161,6 +196,7 @@ export function createScene(canvas) {
       nextStrike -= dt;
       if (nextStrike <= 0) {
         flash = 1; nextStrike = 1.2 + Math.random() * 5 / Math.min(4, 1 + f.lightning / 20);
+        hooks.onStrike?.();
         let x = W * (0.15 + Math.random() * 0.7), y = horizon * 0.12;
         bolt = [[x, y]];
         while (y < horizon * 0.95) { x += (Math.random() - 0.5) * W * 0.06; y += horizon * (0.08 + Math.random() * 0.1); bolt.push([x, y]); }
@@ -194,7 +230,7 @@ export function createScene(canvas) {
       g.lineWidth = 1.5 * DPR; g.beginPath();
       const y0 = horizon + (H - horizon) * (0.02 + L * 0.06);
       for (let x = 0; x <= W; x += 8 * DPR) {
-        const y = y0 + Math.sin(x * 0.006 * (1 + L * 0.3) + T * (0.5 + windN * 1.6) * (1 + L * 0.2)) * amp * (0.4 + L * 0.25) + Math.sin(x * 0.017 + T * 1.3) * amp * 0.18;
+        const y = y0 + Math.sin(x * 0.006 * (1 + L * 0.3) - windSign * T * (0.5 + windN * 1.6) * (1 + L * 0.2)) * amp * (0.4 + L * 0.25) + Math.sin(x * 0.017 + T * 1.3) * amp * 0.18;
         if (x) g.lineTo(x, y); else g.moveTo(x, y);
       }
       g.stroke();
@@ -226,6 +262,22 @@ export function createScene(canvas) {
       g.beginPath(); g.ellipse(px, py, p.r, p.r * 0.26, 0, 0, TAU); g.stroke();
     }
 
+    // Wind: faint streaks that cross the scene from the direction the wind is really coming from
+    gustDebt += Math.max(0, windN - 0.15) * 5 * dt;
+    for (; gustDebt >= 1 && gusts.length < 40; gustDebt--) {
+      gusts.push({ x: windSign > 0 ? -0.1 : 1.1, y: horizon * (0.45 + Math.random() * 0.5) + (Math.random() < 0.4 ? (H - horizon) * 0.06 : 0), len: W * (0.05 + Math.random() * 0.08), wave: Math.random() * TAU });
+    }
+    const gustSpeed = windSign * Math.max(0.3, Math.abs(windX)) * (0.18 + windN * 0.5); // screen widths per second
+    g.lineWidth = 1.6 * DPR; g.lineCap = 'round';
+    for (let i = gusts.length - 1; i >= 0; i--) {
+      const w = gusts[i]; w.x += gustSpeed * dt;
+      if (w.x < -0.2 || w.x > 1.2) { gusts.splice(i, 1); continue; }
+      const px = w.x * W, lift = Math.sin(T * 2 + w.wave) * 6 * DPR;
+      g.strokeStyle = `rgba(255,255,255,${0.1 + windN * 0.22})`;
+      g.beginPath(); g.moveTo(px, w.y + lift);
+      g.quadraticCurveTo(px - windSign * w.len * 0.5, w.y - lift * 1.5, px - windSign * w.len, w.y + lift * 0.5); g.stroke();
+    }
+
     // Lily pads die back in cold water and spread as it warms
     const padCount = (f.temp ?? 12) < 8 ? 0 : Math.max(1, Math.round((tN - 0.2) * 7 - windN * 2));
     for (let i = 0; i < padCount; i++) {
@@ -238,7 +290,7 @@ export function createScene(canvas) {
     // Reeds at the edges, bending with the wind
     for (const r of reeds) {
       const bx = r.x * W, by = horizon + H * 0.014, len = r.h * H;
-      const bend = (Math.sin(T * (0.8 + windN * 2) + r.phase) * (0.15 + windN * 0.6) + windN * 0.9) * len * 0.35;
+      const bend = (Math.sin(T * (0.8 + windN * 2) + r.phase) * (0.15 + windN * 0.6) + windN * 0.9 * windX) * len * 0.35; // lean away from the wind
       g.strokeStyle = rgb(mix(mix([24, 52, 34], [78, 128, 64], day), mix([70, 60, 44], [176, 152, 104], day), chill)); g.lineWidth = 2.2 * DPR; g.lineCap = 'round'; // green in summer, dry and tan in winter
       g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx, by - len * 0.5, bx + bend, by - len); g.stroke();
       if (r.head) {
@@ -309,7 +361,7 @@ export function createScene(canvas) {
     dropDebt += (rainN * 50 + stormN * 330) * (snowing ? 2.5 : 1) * dt; // drops per second: a shower is light, a downpour is a wall of rain
     for (; dropDebt >= 1 && drops.length < 700; dropDebt--) drops.push({ x: Math.random() * W * 1.1, y: -10, v: H * (0.9 + Math.random() * 0.5), end: horizon + (H - horizon) * (0.05 + Math.random() * 0.9) });
     if (dropDebt > 50) dropDebt = 0;
-    const slant = (2 + windN * 12) * DPR; // wind blows the rain sideways
+    const slant = -windX * (2 + windN * 12) * DPR; // wind blows the rain sideways, the way it is really blowing
     if (snowing) { // below freezing, the same readings fall as slow, drifting snow
       g.fillStyle = 'rgba(255,255,255,.85)';
       for (const d of drops) {

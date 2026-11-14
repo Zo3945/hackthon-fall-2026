@@ -12,10 +12,14 @@
 //   airy hiss           wind                 more wind = louder, higher hiss
 //   high piano drips    rain                 more rain = more drips
 //   silence             a gap in the data    when the sensor is offline, the piano stops
+//   thunder             lightning strikes    a rumble each time the scene flashes
+//   crickets            air temperature      warm, dry nights only; warmer air = faster chirps
+//   frogs               water temperature    now and then on warm nights
 //
 // Notes snap to a pentatonic scale so it always sounds like music, not an alarm.
 
 import { clamp, lerp } from './data.js';
+import { sunPosition } from './scene.js';
 
 const PENT = [0, 2, 4, 7, 9]; // major pentatonic: 1 2 3 5 6
 const STEP_MS = 980; // one slow beat
@@ -79,10 +83,11 @@ export function createAudio(getFrame, onNote) {
       src.connect(filter); filter.connect(level); level.connect(gain); gain.connect(bus); src.start();
       return { filter, gain };
     };
-    n = { master, bus, pianoTone, wow, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
+    n = { master, bus, noise, pianoTone, wow, wash: layer(420, 0.8, 0.13), wind: layer(1400, 0.6, 0.07) };
 
     update(0.05);
     setInterval(tick, STEP_MS);
+    setInterval(nightLife, 100);
   }
 
   /**
@@ -166,7 +171,62 @@ export function createAudio(getFrame, onNote) {
     for (let i = 0; i < drips; i++) piano(key + 36 + degree(Math.floor(Math.random() * 6)), 0.05, Math.random() * (STEP_MS / 1000));
   }
 
+  /** A low rumble a moment after the flash, with a short crack on top. */
+  function thunder() {
+    if (!on || !ctx) return;
+    const t = ctx.currentTime + 0.3;
+    const src = ctx.createBufferSource(); src.buffer = n.noise; src.loop = true;
+    const low = ctx.createBiquadFilter(); low.type = 'lowpass'; low.frequency.setValueAtTime(220, t); low.frequency.exponentialRampToValueAtTime(55, t + 3);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(1.6, t + 0.08);
+    env.gain.exponentialRampToValueAtTime(0.5, t + 0.7); env.gain.exponentialRampToValueAtTime(0.0001, t + 3.8);
+    src.connect(low); low.connect(env); env.connect(n.bus);
+    src.start(t, Math.random() * 3); src.stop(t + 4);
+  }
+
+  /** One cricket chirp: three quick, high pulses. */
+  function cricket(t) {
+    for (let k = 0; k < 3; k++) {
+      const osc = ctx.createOscillator(), env = ctx.createGain(), start = t + k * 0.05;
+      osc.frequency.value = 4200 + Math.random() * 250;
+      env.gain.setValueAtTime(0, start); env.gain.linearRampToValueAtTime(0.02, start + 0.006); env.gain.exponentialRampToValueAtTime(0.0001, start + 0.04);
+      osc.connect(env); env.connect(n.bus); osc.start(start); osc.stop(start + 0.05);
+    }
+  }
+
+  /** One frog croak: a low buzzy tone that pulses. */
+  function frog(t) {
+    for (let k = 0; k < 2; k++) {
+      const start = t + k * 0.45;
+      const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.setValueAtTime(190, start); osc.frequency.linearRampToValueAtTime(150, start + 0.3);
+      const tone = ctx.createBiquadFilter(); tone.type = 'bandpass'; tone.frequency.value = 600; tone.Q.value = 2;
+      const pulse = ctx.createOscillator(); pulse.type = 'square'; pulse.frequency.value = 38;
+      const pulseDepth = ctx.createGain(); pulseDepth.gain.value = 0.03;
+      const env = ctx.createGain(); env.gain.setValueAtTime(0, start); env.gain.linearRampToValueAtTime(0.035, start + 0.03); env.gain.linearRampToValueAtTime(0, start + 0.32);
+      pulse.connect(pulseDepth); pulseDepth.connect(env.gain);
+      osc.connect(tone); tone.connect(env); env.connect(n.bus);
+      osc.start(start); pulse.start(start); osc.stop(start + 0.34); pulse.stop(start + 0.34);
+    }
+  }
+
+  // Crickets and frogs on warm, dry nights. Crickets really do chirp faster in warmer air:
+  // chirps in 14 seconds plus 40 is roughly the temperature in °F (Dolbear's law).
+  let nextChirp = 0;
+  function nightLife() {
+    const f = on && getFrame();
+    if (!f || f.gap) return;
+    const sun = sunPosition(f.timeMs), air = f.air ?? f.temp;
+    if ((sun > -0.02 && sun < 1.02) || air == null || air < 13 || f.rain > 0.5) return; // daytime, too cold, or raining
+    const now = ctx.currentTime;
+    if (now < nextChirp) return;
+    const chirpsPerSecond = clamp(((air * 9) / 5 + 32 - 40) / 14, 0.6, 3.5);
+    nextChirp = now + (0.85 + Math.random() * 0.3) / chirpsPerSecond;
+    cricket(now + 0.02);
+    if (Math.random() < 0.03 && (f.temp ?? 0) >= 15) frog(now + 0.2);
+  }
+
   return {
+    thunder,
     setOn(value) {
       if (value && !ctx) init();
       on = value;
