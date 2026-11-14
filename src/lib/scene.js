@@ -5,7 +5,9 @@
 //   fish depth   = up top when oxygen is low, deep in cold water, storms and hot sun, low at night
 //   geese        = leave when the water is near freezing, shelter from wind and rain
 //   turtles      = bask on the log when warm and sunny, sink and rest when cold
-//   reeds        = bend with the wind
+//   reeds        = bend with the wind, turn dry and tan in cold water
+//   winter       = frosty hills and a pale sun when the air is below freezing, ice as the water nears freezing,
+//                  snow when it rains below freezing
 //   rings of light = each piano note as it plays
 //   dragonflies  = warm, calm, dry days   fireflies = warm, dry nights
 
@@ -102,6 +104,12 @@ export function createScene(canvas) {
     const turbN = clamp((f.turb ?? 4) / 50, 0, 1);
     const rainN = clamp(f.rain / 3, 0, 1);
     const stormN = clamp((f.rain - 2) / 10, 0, 1); // 0 for showers, 1 for a downpour
+    // Winter: frost follows the air temperature, ice follows the water temperature
+    const airTemp = f.air ?? f.temp ?? 12;
+    const frost = clamp((1 - airTemp) / 5, 0, 1); // 0 above freezing, 1 at about 25°F and colder
+    const ice = clamp((3 - (f.temp ?? 12)) / 2.5, 0, 1); // ice forms as the water nears freezing
+    const chill = clamp((9 - (f.temp ?? 12)) / 6, 0, 1); // plants die back in cold water
+    const snowing = f.rain > 0.05 && airTemp <= 0.5; // rain that falls below freezing is drawn as snow
     const doN = clamp((f.doPct ?? 90) / 100, 0, 1.4);
     const windN = f.windN;
     const sun = sunPosition(f.timeMs);
@@ -110,14 +118,14 @@ export function createScene(canvas) {
 
     // Sky
     let gr = g.createLinearGradient(0, 0, 0, horizon);
-    gr.addColorStop(0, rgb(mix([6, 12, 34], [96, 150, 205], day * (1 - rainN * 0.6 - stormN * 0.25))));
-    gr.addColorStop(1, rgb(mix([16, 30, 58], [196, 222, 236], day * (1 - rainN * 0.55 - stormN * 0.3))));
+    gr.addColorStop(0, rgb(mix(mix([6, 12, 34], [96, 150, 205], day * (1 - rainN * 0.6 - stormN * 0.25)), [170, 188, 204], frost * 0.45 * day)));
+    gr.addColorStop(1, rgb(mix(mix([16, 30, 58], [196, 222, 236], day * (1 - rainN * 0.55 - stormN * 0.3)), [226, 232, 238], frost * 0.6 * day)));
     g.fillStyle = gr; g.fillRect(0, 0, W, horizon);
 
     // Sun or moon
     const sunT = clamp(sun, 0, 1);
     if (sun > 0 && sun < 1) {
-      g.fillStyle = `rgba(255,236,170,${0.9 * (1 - rainN)})`;
+      g.fillStyle = rgb(mix([255, 236, 170], [250, 248, 238], frost), (0.9 - frost * 0.25) * (1 - rainN)); // a pale winter sun
       g.beginPath(); g.arc(W * (0.12 + 0.76 * sunT), horizon * (0.85 - 0.6 * Math.sin(sunT * Math.PI)), H * 0.035, 0, TAU); g.fill();
     } else {
       g.fillStyle = `rgba(235,240,255,${0.85 * (1 - rainN)})`;
@@ -125,7 +133,8 @@ export function createScene(canvas) {
     }
 
     // Far bank
-    g.fillStyle = rgb(mix([10, 24, 24], [30, 70, 50], day));
+    // Hills turn white with frost and snow when the air is below freezing
+    g.fillStyle = rgb(mix(mix([10, 24, 24], [30, 70, 50], day), mix([70, 80, 100], [232, 238, 244], day), frost * 0.9));
     g.beginPath(); g.moveTo(0, horizon);
     for (let x = 0; x <= W; x += W / 40) g.lineTo(x, horizon - H * (0.03 + 0.03 * Math.abs(Math.sin(x * 0.011) + Math.sin(x * 0.0047))));
     g.lineTo(W, horizon); g.closePath(); g.fill();
@@ -141,6 +150,7 @@ export function createScene(canvas) {
         g.ellipse(cx, cy, W * 0.2, horizon * 0.15, 0, 0, TAU);
         g.ellipse(cx + W * 0.11, cy + horizon * 0.05, W * 0.16, horizon * 0.12, 0, 0, TAU);
         g.fill();
+        hits.push({ kind: 'cloud', id: i, x: cx + W * 0.05, y: cy + horizon * 0.02, r: Math.min(W * 0.13, horizon * 0.2) });
       }
     }
 
@@ -177,7 +187,7 @@ export function createScene(canvas) {
     g.globalAlpha = 1;
 
     // Waves: taller and faster with wind
-    const amp = (3 + windN * 16 + rainN * 6 + stormN * 10) * DPR;
+    const amp = (3 + windN * 16 + rainN * 6 + stormN * 10) * DPR * (1 - ice * 0.75); // ice calms the surface
     for (let L = 0; L < 4; L++) {
       g.strokeStyle = `rgba(255,255,255,${0.06 + 0.05 * (3 - L) * (0.4 + day)})`;
       g.lineWidth = 1.5 * DPR; g.beginPath();
@@ -190,6 +200,21 @@ export function createScene(canvas) {
     }
 
     // Lily pads: more when warm and calm
+    // Ice: a pale sheet across the surface, thicker the closer the water is to freezing
+    if (ice > 0.02) {
+      const depth = H * (0.012 + ice * 0.03);
+      g.fillStyle = rgb(mix([150, 170, 195], [226, 238, 246], day), 0.3 + ice * 0.5);
+      g.beginPath(); g.moveTo(0, horizon);
+      g.lineTo(W, horizon);
+      for (let x = W; x >= 0; x -= W / 36) g.lineTo(x, horizon + depth * (0.75 + 0.25 * Math.sin(x * 0.013) + 0.2 * Math.sin(x * 0.041 + 2)));
+      g.closePath(); g.fill();
+      g.strokeStyle = `rgba(255,255,255,${0.25 + ice * 0.35})`; g.lineWidth = DPR;
+      for (let i = 0; i < 9; i++) { // cracks
+        const x = W * ((i * 0.117 + 0.05) % 1);
+        g.beginPath(); g.moveTo(x, horizon + 2 * DPR); g.lineTo(x + W * 0.03, horizon + depth * 0.5); g.lineTo(x + W * 0.012, horizon + depth * 0.9); g.stroke();
+      }
+    }
+
     // Each piano note spreads a ring of light across the surface: low notes on the left, high on the right
     for (let i = pulses.length - 1; i >= 0; i--) {
       const p = pulses[i]; p.r += 110 * DPR * dt; p.a -= 0.42 * dt;
@@ -213,7 +238,7 @@ export function createScene(canvas) {
     for (const r of reeds) {
       const bx = r.x * W, by = horizon + H * 0.014, len = r.h * H;
       const bend = (Math.sin(T * (0.8 + windN * 2) + r.phase) * (0.15 + windN * 0.6) + windN * 0.9) * len * 0.35;
-      g.strokeStyle = rgb(mix([24, 52, 34], [78, 128, 64], day)); g.lineWidth = 2.2 * DPR; g.lineCap = 'round';
+      g.strokeStyle = rgb(mix(mix([24, 52, 34], [78, 128, 64], day), mix([70, 60, 44], [176, 152, 104], day), chill)); g.lineWidth = 2.2 * DPR; g.lineCap = 'round'; // green in summer, dry and tan in winter
       g.beginPath(); g.moveTo(bx, by); g.quadraticCurveTo(bx, by - len * 0.5, bx + bend, by - len); g.stroke();
       if (r.head) {
         g.fillStyle = rgb(mix([40, 28, 18], [112, 76, 46], day));
@@ -226,6 +251,10 @@ export function createScene(canvas) {
     const logX = W * 0.68, logY = horizon + H * 0.022, logW = H * 0.2;
     g.fillStyle = rgb(mix([38, 27, 20], [98, 70, 46], day));
     g.beginPath(); g.ellipse(logX, logY, logW / 2, H * 0.012, 0, 0, TAU); g.fill();
+    if (frost > 0.15) { // snow on the log
+      g.fillStyle = rgb(mix([120, 130, 150], [240, 245, 250], day), frost);
+      g.beginPath(); g.ellipse(logX, logY - H * 0.006, logW * 0.46, H * 0.008, 0, Math.PI, TAU); g.fill();
+    }
 
     // Turtles: bask when warm and sunny, swim otherwise, rest low when the water is cold
     const waterTemp = f.temp ?? 12;
@@ -280,10 +309,17 @@ export function createScene(canvas) {
     for (; dropDebt >= 1 && drops.length < 700; dropDebt--) drops.push({ x: Math.random() * W * 1.1, y: -10, v: H * (0.9 + Math.random() * 0.5), end: horizon + (H - horizon) * (0.05 + Math.random() * 0.9) });
     if (dropDebt > 50) dropDebt = 0;
     const slant = (2 + windN * 12) * DPR; // wind blows the rain sideways
+    if (snowing) { // below freezing, the same readings fall as slow, drifting snow
+      g.fillStyle = 'rgba(255,255,255,.85)';
+      for (const d of drops) {
+        d.y -= d.v * dt * 0.8; // snow falls at a fifth of the speed of rain
+        g.beginPath(); g.arc(d.x + Math.sin(T * 1.5 + d.end) * 6 * DPR, d.y, 2.2 * DPR, 0, TAU); g.fill();
+      }
+    }
     g.strokeStyle = 'rgba(200,225,255,.5)'; g.lineWidth = 1.2 * DPR;
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i]; d.y += d.v * dt; d.x -= slant * 3 * dt;
-      g.beginPath(); g.moveTo(d.x + slant, d.y - 18 * DPR); g.lineTo(d.x, d.y); g.stroke();
+      if (!snowing) { g.beginPath(); g.moveTo(d.x + slant, d.y - 18 * DPR); g.lineTo(d.x, d.y); g.stroke(); }
       if (d.y >= d.end) { ripples.push({ x: d.x, y: d.end, r: 2, a: 0.5 }); drops.splice(i, 1); }
     }
     if (ripples.length > 220) ripples.splice(0, ripples.length - 220);

@@ -1,4 +1,4 @@
-// What each animal shows when you click it, written for kids.
+// What each animal or cloud shows when you click it, written for kids.
 // The main line is a fact that belongs to that animal. Under it is the live reading it stands for.
 
 import { toF } from './health.js';
@@ -47,6 +47,18 @@ const FISH_WHERE = {
   normal: 'Swimming all over the pond',
 };
 
+const CLOUD_FACTS = [
+  'Clouds are made of tiny drops of water floating in the air.',
+  'Rain adds fresh water to the pond.',
+  'Rain can wash soil into a pond and make the water cloudy.',
+  'Thunder is the sound that lightning makes.',
+  'Count the seconds from lightning to thunder. About five seconds means one mile away.',
+  'Wind pushes clouds across the sky.',
+  'A weather station beside the pond measures the rain.',
+  'Raindrops stir air into the top of the water.',
+  'Storm clouds look dark because they are thick with water.',
+];
+
 const FISH_NAMES = ['Sunny', 'Finn', 'Pebble', 'Goldie', 'Bubbles', 'Splash', 'Dot', 'Pumpkin', 'Ripple'];
 const TURTLE_NAMES = ['Mossy', 'Shelly'];
 const GOOSE_NAMES = ['Maple', 'Hudson', 'Birch'];
@@ -55,6 +67,17 @@ const GOOSE_NAMES = ['Maple', 'Hudson', 'Birch'];
 export function describe(hit, f) {
   const id = hit.id ?? 0;
   const water = f.temp == null ? 'no reading' : deg(f.temp);
+
+  if (hit.kind === 'cloud') {
+    const rain = f.rain ?? 0;
+    const howHard = rain < 0.05 ? 'none' : rain < 2 ? 'a light shower' : rain < 8 ? 'steady rain' : 'a downpour';
+    const strikes = f.lightning > 0 ? ` Lightning strikes counted: ${f.lightning.toFixed(0)}.` : ' No lightning.';
+    return {
+      title: 'Rain cloud',
+      fact: pick(CLOUD_FACTS, id),
+      reading: `Rain this hour: ${rain < 0.05 ? '' : `${rain.toFixed(1)} mm, `}${howHard}.${strikes}`,
+    };
+  }
 
   if (hit.kind === 'fish') {
     const o = f.doPct;

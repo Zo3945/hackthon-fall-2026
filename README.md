@@ -15,7 +15,7 @@ A living picture of Choate Pond, driven by real sensor readings, for people who 
 - A plain-words message says how the pond is doing and why.
 - Each piano note sends a ring of light across the water, and the piano goes silent when the sensor is offline.
 - Conductivity is shown as "Salt in the water".
-- Click a fish, turtle or goose to see its name, a short fact of its own, and the live reading it stands for.
+- Click a fish, turtle, goose or rain cloud to see a short fact and the live reading it stands for.
 - A calm soundscape follows the same readings (pitch is temperature, brightness is oxygen, bell notes follow pH, drips are rain).
 
 ## Run it

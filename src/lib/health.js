@@ -23,7 +23,7 @@ export function health({ temp, doPct, turb, ph, rain }) {
   else if (score >= 45) mood = 'The pond is stressed';
   else mood = 'The pond is struggling';
 
-  const calm = temp != null && temp < 6 ? 'Cold, clear, and calm.' : 'Clear water, plenty of oxygen, nothing unusual.';
+  const calm = temp != null && temp < 3 ? 'Nearly frozen, but clear and calm.' : temp != null && temp < 6 ? 'Cold, clear, and calm.' : 'Clear water, plenty of oxygen, nothing unusual.';
   return { score, mood, why: issues.length ? issues.join(' ') : calm };
 }
 
