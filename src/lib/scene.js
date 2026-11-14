@@ -110,6 +110,7 @@ export function createScene(canvas) {
     const ice = clamp((3 - (f.temp ?? 12)) / 2.5, 0, 1); // ice forms as the water nears freezing
     const chill = clamp((9 - (f.temp ?? 12)) / 6, 0, 1); // plants die back in cold water
     const snowing = f.rain > 0.05 && airTemp <= 0.5; // rain that falls below freezing is drawn as snow
+    const white = Math.max(frost, snowing ? 0.85 : 0); // how snowy the land looks
     const doN = clamp((f.doPct ?? 90) / 100, 0, 1.4);
     const windN = f.windN;
     const sun = sunPosition(f.timeMs);
@@ -134,7 +135,7 @@ export function createScene(canvas) {
 
     // Far bank
     // Hills turn white with frost and snow when the air is below freezing
-    g.fillStyle = rgb(mix(mix([10, 24, 24], [30, 70, 50], day), mix([70, 80, 100], [232, 238, 244], day), frost * 0.9));
+    g.fillStyle = rgb(mix(mix([10, 24, 24], [30, 70, 50], day), mix([70, 80, 100], [232, 238, 244], day), white * 0.9));
     g.beginPath(); g.moveTo(0, horizon);
     for (let x = 0; x <= W; x += W / 40) g.lineTo(x, horizon - H * (0.03 + 0.03 * Math.abs(Math.sin(x * 0.011) + Math.sin(x * 0.0047))));
     g.lineTo(W, horizon); g.closePath(); g.fill();
@@ -251,8 +252,8 @@ export function createScene(canvas) {
     const logX = W * 0.68, logY = horizon + H * 0.022, logW = H * 0.2;
     g.fillStyle = rgb(mix([38, 27, 20], [98, 70, 46], day));
     g.beginPath(); g.ellipse(logX, logY, logW / 2, H * 0.012, 0, 0, TAU); g.fill();
-    if (frost > 0.15) { // snow on the log
-      g.fillStyle = rgb(mix([120, 130, 150], [240, 245, 250], day), frost);
+    if (white > 0.15) { // snow on the log
+      g.fillStyle = rgb(mix([120, 130, 150], [240, 245, 250], day), white);
       g.beginPath(); g.ellipse(logX, logY - H * 0.006, logW * 0.46, H * 0.008, 0, Math.PI, TAU); g.fill();
     }
 
@@ -305,7 +306,7 @@ export function createScene(canvas) {
     g.globalAlpha = 1;
 
     // Rain and the rings it leaves
-    dropDebt += (rainN * 50 + stormN * 330) * dt; // drops per second: a shower is light, a downpour is a wall of rain
+    dropDebt += (rainN * 50 + stormN * 330) * (snowing ? 2.5 : 1) * dt; // drops per second: a shower is light, a downpour is a wall of rain
     for (; dropDebt >= 1 && drops.length < 700; dropDebt--) drops.push({ x: Math.random() * W * 1.1, y: -10, v: H * (0.9 + Math.random() * 0.5), end: horizon + (H - horizon) * (0.05 + Math.random() * 0.9) });
     if (dropDebt > 50) dropDebt = 0;
     const slant = (2 + windN * 12) * DPR; // wind blows the rain sideways
@@ -313,14 +314,14 @@ export function createScene(canvas) {
       g.fillStyle = 'rgba(255,255,255,.85)';
       for (const d of drops) {
         d.y -= d.v * dt * 0.8; // snow falls at a fifth of the speed of rain
-        g.beginPath(); g.arc(d.x + Math.sin(T * 1.5 + d.end) * 6 * DPR, d.y, 2.2 * DPR, 0, TAU); g.fill();
+        g.beginPath(); g.arc(d.x + Math.sin(T * 1.5 + d.end) * 6 * DPR, d.y, (1.6 + (d.end % 3) * 0.6) * DPR, 0, TAU); g.fill();
       }
     }
     g.strokeStyle = 'rgba(200,225,255,.5)'; g.lineWidth = 1.2 * DPR;
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i]; d.y += d.v * dt; d.x -= slant * 3 * dt;
       if (!snowing) { g.beginPath(); g.moveTo(d.x + slant, d.y - 18 * DPR); g.lineTo(d.x, d.y); g.stroke(); }
-      if (d.y >= d.end) { ripples.push({ x: d.x, y: d.end, r: 2, a: 0.5 }); drops.splice(i, 1); }
+      if (d.y >= d.end) { if (!snowing) ripples.push({ x: d.x, y: d.end, r: 2, a: 0.5 }); drops.splice(i, 1); } // snowflakes land without a splash
     }
     if (ripples.length > 220) ripples.splice(0, ripples.length - 220);
     for (let i = ripples.length - 1; i >= 0; i--) {

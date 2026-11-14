@@ -186,6 +186,11 @@ export function findEvents(series) {
   // Land on the wettest hour of that storm, not the calm before it.
   let peakAt = stormAt;
   for (let k = 0; k < 12; k++) if ((rain[stormAt + k] || 0) > (rain[peakAt] || 0)) peakAt = stormAt + k;
+  // Snow: the wettest hour while the air was at or below freezing (0.5°C allows for sensor error)
+  const air = series.col('AirTemp');
+  let snowAt = 0, snowMost = 0;
+  rain.forEach((v, i) => { if (v > snowMost && air[i] != null && air[i] <= 0.5) { snowMost = v; snowAt = i; } });
+
   return [
     { label: 'Biggest storm', pos: peakAt },
     { label: 'Warmest water', pos: best('Temp') },
@@ -193,5 +198,6 @@ export function findEvents(series) {
     { label: 'Lowest oxygen', pos: steady('DOpct', (x) => -x, (i) => (series.col('Temp')[i] ?? 0) >= 10) },
     { label: 'Murkiest water', pos: steady('Turb') },
     { label: 'Coldest day', pos: best('Temp', (x) => -x) },
+    { label: 'Snow day', pos: snowAt },
   ];
 }

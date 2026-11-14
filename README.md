@@ -7,6 +7,7 @@ A living picture of Choate Pond, driven by real sensor readings, for people who 
 - Water color is temperature (cold blue to warm green).
 - Murkiness is turbidity.
 - Waves are wind, and rain falls when it rained.
+- In winter the hills frost over, ice forms as the water nears freezing, and rain recorded below freezing falls as snow.
 - Fish swim fast when oxygen is high and gasp at the surface when it is low.
 - Geese paddle on the surface, shelter by the reeds in wind and rain, and leave when the water is near freezing.
 - Turtles bask on a log on warm sunny days, swim when it is cooler, and rest low when the water is cold.

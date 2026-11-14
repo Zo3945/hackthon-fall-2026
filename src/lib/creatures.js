@@ -70,12 +70,15 @@ export function describe(hit, f) {
 
   if (hit.kind === 'cloud') {
     const rain = f.rain ?? 0;
-    const howHard = rain < 0.05 ? 'none' : rain < 2 ? 'a light shower' : rain < 8 ? 'steady rain' : 'a downpour';
+    const snow = rain >= 0.05 && (f.air ?? 10) <= 0.5; // below freezing, it falls as snow
+    const howHard = rain < 0.05 ? 'none' : snow ? (rain < 1 ? 'light snow' : 'steady snow') : rain < 2 ? 'a light shower' : rain < 8 ? 'steady rain' : 'a downpour';
     const strikes = f.lightning > 0 ? ` Lightning strikes counted: ${f.lightning.toFixed(0)}.` : ' No lightning.';
     return {
-      title: 'Rain cloud',
+      title: snow ? 'Snow cloud' : 'Rain cloud',
       fact: pick(CLOUD_FACTS, id),
-      reading: `Rain this hour: ${rain < 0.05 ? '' : `${rain.toFixed(1)} mm, `}${howHard}.${strikes}`,
+      reading: snow
+        ? `Snow this hour: ${howHard}, ${rain.toFixed(1)} mm once melted. The air is ${deg(f.air)}.`
+        : `Rain this hour: ${rain < 0.05 ? '' : `${rain.toFixed(1)} mm, `}${howHard}.${strikes}`,
     };
   }
 

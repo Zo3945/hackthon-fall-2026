@@ -7,7 +7,7 @@ const READINGS = [
   ['Cloudiness', (f) => f.turb, cloudiness],
   ['Acidity (pH)', (f) => f.ph, (v) => v.toFixed(1)],
   ['Salt in the water', (f) => f.cond, (v) => `${saltiness(v)} (${v.toFixed(0)} µS/cm)`],
-  ['Rain this hour', (f) => f.rain, (v) => (v < 0.05 ? 'None' : `${v.toFixed(1)} mm`)],
+  ['Rain or snow this hour', (f) => f.rain, (v) => (v < 0.05 ? 'None' : `${v.toFixed(1)} mm`)],
   ['Air temperature', (f) => f.air, (v) => `${toF(v).toFixed(0)}°F`],
 ];
 
