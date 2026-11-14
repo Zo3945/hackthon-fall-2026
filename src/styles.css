@@ -45,6 +45,14 @@ button.primary:hover { background:#9aecd8; }
 .bubble-fact { margin-top:6px; font-size:15px; }
 .bubble-reading { margin-top:8px; padding-top:8px; border-top:1px solid var(--line); color:var(--accent); font-size:12px; }
 
+/* Wind compass */
+.compass { position:fixed; right:28px; top:122px; display:flex; flex-direction:column; align-items:center; gap:4px; pointer-events:none; }
+.compass text { fill:var(--ink2); font-size:11px; font-weight:600; text-anchor:middle; font-family:inherit; }
+.compass text.compass-n { fill:#ff8f8f; }
+.compass-arrow { transition:transform .8s ease; }
+.compass-label { font-size:12px; color:var(--ink2); text-align:center; text-shadow:0 1px 8px rgba(0,0,0,.6); }
+.compass-label b { display:block; color:var(--ink); font-size:14px; }
+
 /* Start screen theme line */
 .theme { font-size:13px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
 

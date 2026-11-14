@@ -155,7 +155,7 @@ export function createScene(canvas, hooks = {}) {
       g.beginPath(); g.arc(W * (0.12 + 0.76 * sunT), horizon * (0.85 - 0.6 * Math.sin(sunT * Math.PI)), H * 0.035, 0, TAU); g.fill();
     } else {
       // The moon, lit the way it really is tonight
-      const phase = moonPhase(f.timeMs), mx = W * 0.82, my = horizon * 0.3, mr = H * 0.028;
+      const phase = moonPhase(f.timeMs), mx = W * 0.62, my = horizon * 0.42, mr = H * 0.028; // clear of the date and the compass
       const lit = (1 - Math.cos(phase * TAU)) / 2; // share of the face that is lit
       g.save(); g.translate(mx, my); g.globalAlpha = 1 - rainN;
       if (phase > 0.5) g.scale(-1, 1); // waning: the lit side is on the left

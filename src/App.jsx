@@ -4,6 +4,7 @@ import Header from './components/Header.jsx';
 import Dock from './components/Dock.jsx';
 import Splash from './components/Splash.jsx';
 import InfoBubble from './components/InfoBubble.jsx';
+import Compass from './components/Compass.jsx';
 
 export default function App() {
   const canvasRef = useRef(null);
@@ -38,6 +39,7 @@ export default function App() {
       {pond.info && <InfoBubble key={pond.info.title} info={pond.info} onClose={pond.closeInfo} />}
       {pond.view && <Header pond={pond} />}
       {pond.view && <Dock pond={pond} />}
+      {pond.view && pond.started && <Compass frame={pond.view.frame} />}
       {!pond.started && <Splash onStart={pond.start} />}
     </>
   );
