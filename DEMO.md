@@ -4,7 +4,7 @@ Before you start: run `npm run dev`, open http://localhost:5173, turn the laptop
 
 ## 0:00 to 0:25: What it is and who it's for (slide)
 
-"Choate Pond has sensors taking a reading every fifteen minutes. That data only matters if a normal person can understand it. So we built The Pond Wakes Up: a living picture of the pond that anyone can read at a glance. A kid, a parent, someone walking past Kessel. No charts."
+"Choate Pond has sensors taking a reading every fifteen minutes. That data only matters if a normal person can understand it. So we built The Pond Wakes Up: a living picture of the pond that anyone can read at a glance. We built it for this hackathon, with potential to scale."
 
 ## 0:25 to 1:05: Live, right now
 
@@ -29,11 +29,11 @@ Click **Biggest storm**.
 
 Click **Lowest oxygen**.
 
-"June 14, four in the morning, warm water. Oxygen dropped to 4 percent. The fish are at the surface gulping, and listen to the piano: a few slow, dull notes."
+"June 14, four in the morning, warm water. Oxygen dropped to about 4 percent saturation. The fish are at the surface gulping, and listen to the piano: a few slow, dull notes."
 
 Click **Snow day**.
 
-"March 3. The air is at freezing and it's snowing. The hills turn white."
+"March 3. The station recorded precipitation with the air near freezing, so the app draws snow and turns the hills white."
 
 ## 2:20 to 2:50: How it's built, and what we were honest about
 
@@ -51,7 +51,7 @@ Click **Live now**.
 
 ## If something goes wrong
 
-- **No internet:** the page falls back to the replay by itself and says so. Do the three moments and skip the live part.
+- **No internet at startup:** the page keeps the recorded replay and labels it. If the connection drops after live mode loads, the last live series stays on screen. Use a Jump to button to open history, then skip the live part.
 - **No sound:** click the **Sound** button once. If it still fails, say "the piano follows the same readings" and keep going.
 - **Running long:** drop the Snow day.
 
