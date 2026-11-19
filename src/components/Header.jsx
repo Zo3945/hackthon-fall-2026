@@ -18,7 +18,7 @@ export default function Header({ pond }) {
   return (
     <header className="top">
       <div>
-        <div className="title">Choate Pond · Pace University Pleasantville</div>
+        <div className="title"><span className="long">Choate Pond · Pace University Pleasantville</span><span className="short">Choate Pond · Pace</span></div>
         <div className="mood">{view.health.mood}</div>
         <div className="why">{view.health.why}</div>
       </div>

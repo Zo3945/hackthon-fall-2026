@@ -382,8 +382,9 @@ export function createScene(canvas, hooks = {}) {
           : waterTemp >= 24 && day > 0.6 ? { kind: 'hot', top: 0.55, bottom: 1, speed: 0.7 }
             : day < 0.25 ? { kind: 'night', top: 0.5, bottom: 0.95, speed: 0.45 }
               : { kind: 'normal', top: 0.2, bottom: 0.95, speed: 1 };
-    // don't let fish swim behind the control panel
-    const floor = clamp((H - 215 * DPR - horizon) / (H - horizon), 0.35, 0.9);
+    // don't let fish swim behind the control panel (its top edge comes from the page)
+    const panelTop = hooks.panelTop?.();
+    const floor = clamp(((panelTop ? panelTop * DPR - 20 * DPR : H - 215 * DPR) - horizon) / (H - horizon), 0.35, 0.9);
     for (const fi of fish) {
       fi.x += fi.vx * energy * dt * 0.75 * place.speed;
       if (fi.x > 1.08) fi.x = -0.08;
@@ -462,12 +463,13 @@ export function createScene(canvas, hooks = {}) {
   resize();
   window.addEventListener('resize', resize);
   // closest clickable thing under the pointer, if any
+  const fingerSlack = window.matchMedia?.('(pointer: coarse)').matches ? 26 : 0; // fingers are bigger than mice
   function hitTest(cssX, cssY) {
     const x = cssX * DPR, y = cssY * DPR;
     let best = null, bestDist = Infinity;
     for (const h of hits) {
       const d = Math.hypot(h.x - x, h.y - y);
-      if (d < h.r && d < bestDist) { best = h; bestDist = d; }
+      if (d < Math.max(h.r, fingerSlack * DPR) && d < bestDist) { best = h; bestDist = d; }
     }
     return best && { ...best, x: best.x / DPR, y: best.y / DPR };
   }

@@ -90,7 +90,7 @@ export function usePond(canvasRef) {
   // animation loop
   useEffect(() => {
     if (status !== 'ready' || !canvasRef.current) return undefined;
-    const scene = createScene(canvasRef.current, { onStrike: () => audioRef.current?.thunder() });
+    const scene = createScene(canvasRef.current, { onStrike: () => audioRef.current?.thunder(), panelTop: () => eng.panelTop });
     eng.scene = scene;
     let raf = 0, last = performance.now(), lastUi = 0;
     const loop = (now) => {
@@ -104,6 +104,7 @@ export function usePond(canvasRef) {
       scene.draw(dt, frame);
       if (now - lastUi > UI_REFRESH_MS) {
         lastUi = now; snapshot(frame);
+        eng.panelTop = document.querySelector('.dock')?.getBoundingClientRect().top; // panel size changes on phones
         // keep the bubble stuck to the animal as it swims
         const hit = scene.selectedHit();
         if (hit) setInfo({ x: hit.x, y: hit.y, ...describe(hit, frame) });

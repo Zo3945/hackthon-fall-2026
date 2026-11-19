@@ -1,5 +1,5 @@
 export default function InfoBubble({ info, onClose }) {
-  const width = 280;
+  const width = Math.min(280, window.innerWidth - 24); // fits small phones
   const left = Math.max(12, Math.min(window.innerWidth - width - 12, info.x - width / 2));
   const above = info.y > 260; // flip below if it's near the top
   const style = { left, width, ...(above ? { bottom: window.innerHeight - info.y + 28 } : { top: info.y + 28 }) };
