@@ -32,7 +32,7 @@ export default function Dock({ pond }) {
           onChange={(e) => pond.scrub(e.target.value / 1000)}
         />
         {speed}
-        <button aria-pressed={pond.sound} onClick={pond.toggleSound}>
+        <button className="sound" aria-pressed={pond.sound} aria-label={pond.sound ? 'Sound on' : 'Sound off'} onClick={pond.toggleSound}>
           <span className="long">{pond.sound ? 'Sound on' : 'Sound off'}</span>
           <span className="short" aria-hidden="true">{pond.sound ? '🔊' : '🔇'}</span>
         </button>

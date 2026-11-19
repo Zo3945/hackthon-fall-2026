@@ -79,8 +79,9 @@ button.primary[aria-pressed=false] { background:rgba(127,224,200,.75); }
   .row { flex-wrap:nowrap; gap:6px; }
   .row button { padding:10px 12px; min-height:44px; flex:none; }
   .scrub { min-width:0; height:44px; }
+  .row .sound { min-width:44px; padding:10px 8px; }
   .extra { display:none; }
-  .dock.open .extra { display:block; max-height:min(60dvh, 420px); overflow-y:auto; overscroll-behavior:contain; }
+  .dock.open .extra { display:block; max-height:min(60dvh, 420px); overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; }
   .events { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; margin:10px -10px 0; padding:0 10px 2px; }
   .events::-webkit-scrollbar { display:none; }
   .events button, .events span { flex:none; white-space:nowrap; }
@@ -103,4 +104,15 @@ button.primary[aria-pressed=false] { background:rgba(127,224,200,.75); }
 
   .bubble { font-size:13px; }
   .bubble-head button { padding:8px 12px; }
+}
+
+/* phones held sideways: readings in 4 columns so the sheet doesn't need scrolling */
+@media (max-height:520px) and (min-width:600px) {
+  .reads { grid-template-columns:repeat(4,1fr); }
+}
+
+/* very narrow phones: tighter buttons so the slider has room */
+@media (max-width:360px) {
+  .row { gap:4px; }
+  .row button { padding:10px 9px; }
 }

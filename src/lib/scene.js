@@ -141,12 +141,13 @@ export function createScene(canvas, hooks = {}) {
     }
 
     const sunT = clamp(sun, 0, 1);
+    const portrait = W < H; // phones: keep the sun and moon low so the header text doesn't cover them
     if (sun > 0 && sun < 1) {
       g.fillStyle = rgb(mix([255, 236, 170], [250, 248, 238], frost), (0.9 - frost * 0.25) * (1 - rainN)); // paler in winter
-      g.beginPath(); g.arc(W * (0.12 + 0.76 * sunT), horizon * (0.85 - 0.6 * Math.sin(sunT * Math.PI)), H * 0.035, 0, TAU); g.fill();
+      g.beginPath(); g.arc(W * (0.12 + 0.76 * sunT), horizon * (0.85 - (portrait ? 0.22 : 0.6) * Math.sin(sunT * Math.PI)), H * 0.035, 0, TAU); g.fill();
     } else {
       // the real moon phase for that night. placed so it stays clear of the date and compass
-      const phase = moonPhase(f.timeMs), mx = W * 0.62, my = horizon * 0.42, mr = H * 0.028;
+      const phase = moonPhase(f.timeMs), mx = W * (portrait ? 0.72 : 0.62), my = horizon * (portrait ? 0.68 : 0.42), mr = H * 0.028;
       const lit = (1 - Math.cos(phase * TAU)) / 2;
       g.save(); g.translate(mx, my); g.globalAlpha = 1 - rainN;
       if (phase > 0.5) g.scale(-1, 1); // waning = lit on the left
