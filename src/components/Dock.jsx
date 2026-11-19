@@ -9,7 +9,7 @@ const READINGS = [
   ['Salt in the water', (f) => f.cond, (v) => `${saltiness(v)} (${v.toFixed(0)} µS/cm)`],
   ['Rain or snow this hour', (f) => f.rain, (v) => (v < 0.05 ? 'None' : `${v.toFixed(1)} mm`)],
   ['Air temperature', (f) => f.air, (v) => `${toF(v).toFixed(0)}°F`],
-  // Wind speed arrives in km/h; shown in mph
+  // API gives km/h, we show mph
   ['Wind', (f) => (f.wind == null ? null : f), (f) => `${(f.wind * 0.621).toFixed(0)} mph${f.windDir == null ? '' : ` from the ${compass(f.windDir)}`}`],
 ];
 

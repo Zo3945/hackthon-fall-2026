@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// The Blue CoLab API does not allow direct calls from a browser,
-// so the dev server passes /api/* through to it.
+// the Blue CoLab API blocks browser calls, so we pass /api through the dev server
 const api = {
   '/api': { target: 'https://colabprod01.pace.edu', changeOrigin: true },
 };

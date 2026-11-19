@@ -10,7 +10,7 @@ export default function App() {
   const canvasRef = useRef(null);
   const pond = usePond(canvasRef);
 
-  // Space bar plays and pauses.
+  // space = play/pause
   useEffect(() => {
     const onKey = (e) => {
       if (e.code === 'Space' && !['BUTTON', 'INPUT', 'TEXTAREA'].includes(e.target.tagName)) { e.preventDefault(); pond.togglePlay(); }

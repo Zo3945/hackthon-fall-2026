@@ -1,19 +1,35 @@
-// Pond data: loading, live fetching, and reading values at any point in time.
+// Loads the pond data (recorded + live) and reads values at any moment.
 
 export const COLS = ['Temp', 'DOpct', 'Turb', 'pH', 'Cond', 'Rain', 'WindSpeed', 'AirTemp', 'Lightning', 'WindDir'];
-const COUNTED = ['Rain', 'Lightning']; // added up per hour, where the others are averaged
+const COUNTED = ['Rain', 'Lightning']; // these get added up per hour, the rest get averaged
 export const HOUR = 3600000;
 
 export const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
 
-// Values outside these ranges are sensor faults, not the pond.
+// anything outside these is a broken sensor, not the pond
 const LIMITS = {
   Temp: [0, 40], DOpct: [1, 200], Turb: [0.05, 1000], pH: [4, 10],
   Cond: [50, 3000], WindSpeed: [0, 150], AirTemp: [-30, 45], WindDir: [0, 360],
 };
 
-/** Hourly rows of readings, with smooth lookups between hours. */
+const MAX_REACH = 400; // how many hours we'll look for a reading to cover a gap
+
+/** Gaps swapped for the closest real reading (earlier one wins a tie). Done once, not every frame. */
+function fillGaps(s) {
+  const n = s.length, out = s.slice();
+  const prev = new Array(n), next = new Array(n);
+  for (let i = 0, last = -1; i < n; i++) { if (s[i] != null) last = i; prev[i] = last; }
+  for (let i = n - 1, last = -1; i >= 0; i--) { if (s[i] != null) last = i; next[i] = last; }
+  for (let i = 0; i < n; i++) {
+    if (s[i] != null) continue;
+    const dp = prev[i] < 0 ? Infinity : i - prev[i], dn = next[i] < 0 ? Infinity : next[i] - i;
+    const d = Math.min(dp, dn);
+    out[i] = d < MAX_REACH ? s[dp <= dn ? prev[i] : next[i]] : null;
+  }
+  return out;
+}
+
 export class Series {
   constructor({ rows, startMs, lastMs }) {
     this.rows = rows;
@@ -21,6 +37,7 @@ export class Series {
     this.lastMs = lastMs ?? startMs + (rows.length - 1) * HOUR;
     this.n = rows.length;
     this.cache = {};
+    this.filledCache = {};
   }
 
   col(name) {
@@ -31,26 +48,18 @@ export class Series {
     return this.cache[name];
   }
 
-  nearest(s, i) {
-    for (let d = 1; d < 400; d++) {
-      if (i - d >= 0 && s[i - d] != null) return s[i - d];
-      if (i + d < this.n && s[i + d] != null) return s[i + d];
-    }
-    return null;
+  filled(name) {
+    return (this.filledCache[name] ||= fillGaps(this.col(name)));
   }
 
-  /** Value of a column at a fractional hour position. Gaps use the nearest reading. */
+  /** Value at a fractional hour, blended between the two hours around it. */
   val(name, pos) {
-    const s = this.col(name);
+    const s = this.filled(name);
     const i = Math.floor(pos);
-    const f = pos - i;
-    let a = s[clamp(i, 0, this.n - 1)];
-    let b = s[clamp(i + 1, 0, this.n - 1)];
-    if (a == null) a = this.nearest(s, i);
-    if (b == null) b = this.nearest(s, i + 1);
+    const a = s[clamp(i, 0, this.n - 1)];
     if (a == null) return null;
-    if (b == null) b = a;
-    return lerp(a, b, f);
+    const b = s[clamp(i + 1, 0, this.n - 1)] ?? a;
+    return lerp(a, b, pos - i);
   }
 
   isGap(pos) {
@@ -62,7 +71,7 @@ export class Series {
   }
 }
 
-/** 2nd to 98th percentile range per column, used to scale values to 0..1. */
+/** 2nd-98th percentile per column, so we can squash values to 0..1. */
 export function computeNorm(series) {
   const norm = {};
   for (const c of COLS) {
@@ -78,32 +87,31 @@ export function n01(norm, c, v) {
   return clamp((v - lo) / (hi - lo || 1), 0, 1);
 }
 
-/** Everything the scene, the sound and the text need for one moment. */
+/** Everything the scene, sound and text need for one moment. */
 export function readFrame(series, pos, norm) {
   const wind = series.val('WindSpeed', pos);
   const hour = clamp(Math.round(pos), 0, series.n - 1);
-  const dirs = series.col('WindDir');
-  const windDir = dirs[hour] ?? series.nearest(dirs, hour); // not blended between hours: 350 to 10 must not pass through south
+  const windDir = series.filled('WindDir')[hour]; // don't blend directions: 350 -> 10 would swing through south
   return {
     temp: series.val('Temp', pos),
     doPct: series.val('DOpct', pos),
     turb: series.val('Turb', pos),
     ph: series.val('pH', pos),
-    cond: series.val('Cond', pos), // conductivity: how much salt and minerals are dissolved in the water
+    cond: series.val('Cond', pos), // conductivity = salt and minerals in the water
     rain: series.val('Rain', pos) ?? 0,
-    lightning: series.col('Lightning')[clamp(Math.round(pos), 0, series.n - 1)] ?? 0, // strikes counted this hour
+    lightning: series.col('Lightning')[hour] ?? 0, // strikes this hour
     air: series.val('AirTemp', pos),
     wind,
     windN: n01(norm, 'WindSpeed', wind),
-    windDir, // compass direction the wind blows FROM, in degrees (0 = north, 90 = east)
-    // The scene looks north across the pond, so east is to the right. +1 = blowing left to right.
+    windDir, // where the wind comes FROM, 0 = north
+    // we're looking north, so east is on the right. +1 = blowing left to right
     windX: windDir == null ? 1 : -Math.sin((windDir * Math.PI) / 180),
     timeMs: series.timeAt(pos),
     gap: series.isGap(pos),
   };
 }
 
-/** Recorded history, cleaned by scripts/prep_data.py. */
+/** The recorded history (cleaned by scripts/prep_data.py). */
 export async function loadHistory() {
   const r = await fetch('data/pond.json');
   if (!r.ok) throw new Error('history ' + r.status);
@@ -111,7 +119,7 @@ export async function loadHistory() {
   return new Series({ rows: j.rows, startMs: Date.parse(j.start) });
 }
 
-/** Last 7 days from the Blue CoLab API, averaged into hours. */
+/** Last 7 days from the Blue CoLab API, rolled up into hours. */
 export async function fetchLive() {
   const get = async (station) => {
     const r = await fetch(`api/mneme/sensordata/${station}/delta?days=7`);
@@ -149,33 +157,35 @@ export async function fetchLive() {
     rows.push(COLS.map((c) => {
       const v = b[c];
       if (!v?.length) return COUNTED.includes(c) ? 0 : null;
-      const sum = v.reduce((a, x) => a + x, 0);
-      if (c === 'WindDir') { // average of compass directions: 350 and 10 make north, not south
+      if (c === 'WindDir') { // average directions on a circle so 350 + 10 = north, not south
         const x = v.reduce((a, d) => a + Math.sin((d * Math.PI) / 180), 0), y = v.reduce((a, d) => a + Math.cos((d * Math.PI) / 180), 0);
         return ((Math.atan2(x, y) * 180) / Math.PI + 360) % 360;
       }
+      const sum = v.reduce((a, x) => a + x, 0);
       return COUNTED.includes(c) ? sum : sum / v.length;
     }));
   }
-  // A flat oxygen line for six hours means a stuck sensor, not a calm pond. Drop it.
+  // oxygen flat for 6 hours straight = stuck sensor, not a calm pond. toss it
   const o = COLS.indexOf('DOpct');
+  const stuck = new Array(rows.length).fill(false);
   for (let i = 0; i + 6 <= rows.length; i++) {
-    const w = rows.slice(i, i + 6).map((r) => r[o]);
-    if (w.every((v) => v != null) && Math.max(...w) - Math.min(...w) <= 0.15) w.forEach((_, k) => { rows[i + k].stuck = true; });
+    let min = Infinity, max = -Infinity, ok = true;
+    for (let k = i; k < i + 6; k++) { const v = rows[k][o]; if (v == null) { ok = false; break; } min = Math.min(min, v); max = Math.max(max, v); }
+    if (ok && max - min <= 0.15) for (let k = i; k < i + 6; k++) stuck[k] = true;
   }
-  for (const r of rows) if (r.stuck) r[o] = null;
+  stuck.forEach((s, i) => { if (s) rows[i][o] = null; });
 
   return new Series({ rows, startMs: lo * HOUR, lastMs });
 }
 
-/** Interesting moments in the history, for the "Jump to" buttons. */
+/** The big moments in the record, for the "Jump to" buttons. */
 export function findEvents(series) {
   const best = (name, score = (x) => x) => {
     let top = -Infinity, at = 0;
     series.col(name).forEach((v, i) => { if (v != null && score(v) > top) { top = score(v); at = i; } });
     return at;
   };
-  // Like best(), but scores the 3-hour average, so a one-hour sensor blip can't win.
+  // same idea but uses a 3-hour average, so a one-hour glitch can't win
   const steady = (name, score = (x) => x, allowed = () => true) => {
     const s = series.col(name);
     let top = -Infinity, at = 0;
@@ -187,16 +197,18 @@ export function findEvents(series) {
     return at;
   };
   const rain = series.col('Rain');
-  let stormSum = 0, stormAt = 0;
-  for (let i = 0; i < series.n - 12; i++) {
-    let sum = 0;
-    for (let k = 0; k < 12; k++) sum += rain[i + k] || 0;
-    if (sum > stormSum) { stormSum = sum; stormAt = i; }
+  // wettest 12 hours, using a running total instead of re-adding every window
+  let sum = 0, stormSum = 0, stormAt = 0;
+  for (let i = 0; i < series.n; i++) {
+    sum += rain[i] || 0;
+    if (i >= 12) sum -= rain[i - 12] || 0;
+    const start = i - 11;
+    if (start >= 0 && start < series.n - 12 && sum > stormSum) { stormSum = sum; stormAt = start; }
   }
-  // Land on the wettest hour of that storm, not the calm before it.
+  // land on the heaviest hour, not the calm before it
   let peakAt = stormAt;
   for (let k = 0; k < 12; k++) if ((rain[stormAt + k] || 0) > (rain[peakAt] || 0)) peakAt = stormAt + k;
-  // Snow: the wettest hour while the air was at or below freezing (0.5°C allows for sensor error)
+  // snow = wettest hour with the air at freezing (0.5°C of slack for the sensor)
   const air = series.col('AirTemp');
   let snowAt = 0, snowMost = 0;
   rain.forEach((v, i) => { if (v > snowMost && air[i] != null && air[i] <= 0.5) { snowMost = v; snowAt = i; } });
@@ -204,7 +216,7 @@ export function findEvents(series) {
   return [
     { label: 'Biggest storm', pos: peakAt },
     { label: 'Warmest water', pos: best('Temp') },
-    // Only in water above 50°F: the near-zero winter readings follow a stuck-sensor stretch and are not trusted here.
+    // only above 50°F - the winter lows come right after the stuck-sensor stretch, so we don't trust them
     { label: 'Lowest oxygen', pos: steady('DOpct', (x) => -x, (i) => (series.col('Temp')[i] ?? 0) >= 10) },
     { label: 'Murkiest water', pos: steady('Turb') },
     { label: 'Coldest day', pos: best('Temp', (x) => -x) },

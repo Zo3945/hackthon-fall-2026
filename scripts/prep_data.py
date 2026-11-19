@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Clean Blue CoLab Choate Pond data into one small hourly JSON for the web app.
+"""Turns the raw Blue CoLab CSVs into public/data/pond.json (one row per hour).
 
-Water: Alan (pond sonde). Weather: Odin (rain, wind). Real data only.
-Cleaning: hourly means, impossible values dropped, spikes (sensor, not pond)
-removed with a rolling-median filter, short gaps interpolated, long gaps left null.
+Alan = sensors in the pond, Odin = weather station. We drop impossible values,
+remove sensor spikes, fill short gaps and leave long gaps empty.
 """
 import csv, glob, json, math, os, statistics, sys
 from collections import defaultdict
@@ -18,14 +17,14 @@ WEATHER = {"Rain": None, "WindSpeed": (0, 150), "AirTemp": (-30, 45), "Lightning
 
 
 def mean_direction(degrees):
-    """Average of compass directions. 350 and 10 average to 0 (north), not 180."""
+    """Average directions on a circle: 350 and 10 should give north, not south."""
     x = sum(math.sin(math.radians(d)) for d in degrees)
     y = sum(math.cos(math.radians(d)) for d in degrees)
     return math.degrees(math.atan2(x, y)) % 360
 
 
 def hour_key(ts):
-    # "2026-01-01 00:15:00.000 -0500" -> UTC hour bucket
+    # "2026-01-01 00:15:00.000 -0500" -> that hour in UTC
     dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S.%f %z").astimezone(timezone.utc)
     return dt.replace(minute=0, second=0, microsecond=0)
 
@@ -58,8 +57,7 @@ def read_hourly(files, cols, limits, agg):
 
 
 def unstick(vals, hours=6, tolerance=0.15):
-    """Null out stretches where a sensor repeats almost the same value for six hours.
-    Oxygen in a pond rises and falls every day, so a flat line means a stuck sensor."""
+    """Oxygen always moves during the day, so 6 flat hours = stuck sensor. Blank them."""
     res = list(vals)
     for i in range(len(vals) - hours + 1):
         w = vals[i:i + hours]
@@ -70,7 +68,7 @@ def unstick(vals, hours=6, tolerance=0.15):
 
 
 def despike(vals, win=5, k=4.0, floor=0.0):
-    """Null out points far from the rolling median (sensor glitches)."""
+    """Blank out readings way off from their neighbors (sensor glitches)."""
     n = len(vals)
     res = list(vals)
     for i in range(n):
@@ -87,6 +85,7 @@ def despike(vals, win=5, k=4.0, floor=0.0):
 
 
 def fill_short(vals, max_gap=6):
+    """Draw a straight line across short gaps. Long gaps stay empty."""
     n = len(vals)
     res = list(vals)
     i = 0
@@ -130,9 +129,9 @@ def main():
     for c in ("Rain", "WindSpeed", "AirTemp"):
         raw = [weather.get(h, {}).get(c) for h in hours]
         cols[c] = fill_short(raw, 12) if c != "Rain" else [0 if v is None else v for v in raw]
-    # Lightning strikes counted by the weather station in each hour (0 when none or no data)
+    # lightning strikes per hour (0 if none)
     cols["Lightning"] = [weather.get(h, {}).get("LightningStrikes") or 0 for h in hours]
-    # Compass direction the wind is blowing from (0 = north, 90 = east)
+    # where the wind comes from, 0 = north
     cols["WindDir"] = [weather.get(h, {}).get("WindDir") for h in hours]
 
     def r(v, d=2):

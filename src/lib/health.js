@@ -1,4 +1,4 @@
-// Turns readings into a plain-words verdict anyone can understand.
+// turns the readings into a plain-English mood line
 
 export function health({ temp, doPct, turb, ph, rain }) {
   let score = 100;
@@ -28,7 +28,7 @@ export function health({ temp, doPct, turb, ph, rain }) {
 }
 
 export const cloudiness = (v) => (v < 5 ? 'Clear' : v < 15 ? 'Slightly cloudy' : v < 40 ? 'Cloudy' : 'Murky');
-// Conductivity in µS/cm. The cut-offs are our own plain-words labels for a freshwater pond.
+// conductivity in µS/cm. these cut-offs are our own call, not an official scale
 export const saltiness = (v) => (v < 300 ? 'Low' : v < 800 ? 'Normal' : v < 1500 ? 'Salty' : 'Very salty');
 const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
 export const compass = (deg) => COMPASS[Math.round(deg / 45) % 8];

@@ -1,14 +1,11 @@
-// What each animal or cloud shows when you click it, written for kids.
-// The main line is a fact that belongs to that animal. Under it is the live reading it stands for.
+// what pops up when you click an animal or cloud: a kid-friendly fact + the live reading
 
 import { toF } from './health.js';
 
 const deg = (c) => `${toF(c).toFixed(0)}°F`;
 const pick = (list, id) => list[id % list.length];
 
-// Short facts about the kinds of animals found in ponds around Westchester County, New York.
-// They are general facts about each species, not a survey of what lives in Choate Pond.
-// Sources are listed in the README.
+// general facts about Westchester pond animals, not a count of what's in Choate Pond
 export const FACTS = {
   fish: [
     'Fish breathe air that is mixed into the water.',
@@ -37,7 +34,6 @@ export const FACTS = {
   ],
 };
 
-// Why the fish are where they are right now
 const FISH_WHERE = {
   surface: 'Up at the top, gulping for air',
   cold: 'Staying deep, where the water is warmest in winter',
@@ -63,7 +59,6 @@ const FISH_NAMES = ['Sunny', 'Finn', 'Pebble', 'Goldie', 'Bubbles', 'Splash', 'D
 const TURTLE_NAMES = ['Mossy', 'Shelly'];
 const GOOSE_NAMES = ['Maple', 'Hudson', 'Birch'];
 
-/** Returns { title, fact, reading } for the clicked animal. */
 export function describe(hit, f) {
   const id = hit.id ?? 0;
   const water = f.temp == null ? 'no reading' : deg(f.temp);
@@ -81,7 +76,7 @@ export function describe(hit, f) {
 
   if (hit.kind === 'cloud') {
     const rain = f.rain ?? 0;
-    const snow = rain >= 0.05 && (f.air ?? 10) <= 0.5; // below freezing, it falls as snow
+    const snow = rain >= 0.05 && (f.air ?? 10) <= 0.5;
     const howHard = rain < 0.05 ? 'none' : snow ? (rain < 1 ? 'light snow' : 'steady snow') : rain < 2 ? 'a light shower' : rain < 8 ? 'steady rain' : 'a downpour';
     const strikes = f.lightning > 0 ? ` Lightning strikes counted: ${f.lightning.toFixed(0)}.` : ' No lightning.';
     return {

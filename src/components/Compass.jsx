@@ -1,9 +1,6 @@
 import { compass } from '../lib/health.js';
 
-/**
- * A small compass showing the wind. The arrow points the way the wind is blowing,
- * so wind from the northwest points to the southeast.
- */
+// arrow points where the wind is going (a NW wind points SE)
 export default function Compass({ frame }) {
   if (frame.windDir == null) return null;
   const blowingTo = (frame.windDir + 180) % 360;

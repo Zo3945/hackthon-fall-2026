@@ -1,4 +1,4 @@
-// One hook that runs the pond: data, live/replay mode, playback clock, scene and sound.
+// Runs the whole pond: data, live vs replay, the clock, the scene and the sound.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { clamp, computeNorm, fetchLive, findEvents, loadHistory, readFrame } from './lib/data.js';
@@ -17,12 +17,12 @@ const LIVE_REFRESH_MS = 120000;
 const UI_REFRESH_MS = 120;
 
 export function usePond(canvasRef) {
-  // Fast-changing values live in a ref so the animation loop never waits on React.
+  // fast-changing stuff lives in a ref so the animation loop doesn't wait on React
   const eng = useRef({ hist: null, live: null, series: null, norm: null, pos: 0, playing: true, started: false, speed: 0, stormPos: 0 }).current;
   const audioRef = useRef(null);
 
-  const [status, setStatus] = useState('loading'); // loading | ready | error
-  const [mode, setMode] = useState('replay'); // replay | live
+  const [status, setStatus] = useState('loading');
+  const [mode, setMode] = useState('replay');
   const [liveFailed, setLiveFailed] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [playing, setPlayingState] = useState(true);
@@ -30,14 +30,14 @@ export function usePond(canvasRef) {
   const [started, setStarted] = useState(false);
   const [sound, setSoundState] = useState(false);
   const [events, setEvents] = useState([]);
-  const [activeEvent, setActiveEvent] = useState(null); // which Jump to button is showing, if any
-  const [info, setInfo] = useState(null); // speech bubble for a clicked animal
-  const [view, setView] = useState(null); // snapshot for the UI, refreshed a few times a second
+  const [activeEvent, setActiveEvent] = useState(null);
+  const [info, setInfo] = useState(null); // bubble for whatever got clicked
+  const [view, setView] = useState(null); // what the UI shows, refreshed ~8x a second
 
   const atEnd = () => eng.series && eng.pos >= eng.series.n - 1.01;
-  const snapshot = useCallback(() => {
+  const snapshot = useCallback((given) => {
     if (!eng.series) return;
-    const frame = readFrame(eng.series, eng.pos, eng.norm);
+    const frame = given ?? readFrame(eng.series, eng.pos, eng.norm);
     const live = eng.series === eng.live;
     setView({
       frame,
@@ -63,7 +63,7 @@ export function usePond(canvasRef) {
       eng.live = await fetchLive();
       eng.series = eng.live;
       eng.pos = eng.live.n - 1;
-      eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); // live mode always moves at the slowest speed
+      eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); // live = slowest speed
       setLiveFailed(false); setMode('live'); setPlaying(false); snapshot();
     } catch (err) {
       console.warn('Live feed failed', err);
@@ -73,7 +73,7 @@ export function usePond(canvasRef) {
     }
   }, [eng, setPlaying, snapshot]);
 
-  // Load history, then try the live feed.
+  // load the recorded data first, then try live
   useEffect(() => {
     let cancelled = false;
     loadHistory().then((hist) => {
@@ -87,7 +87,7 @@ export function usePond(canvasRef) {
     return () => { cancelled = true; };
   }, [eng, goLive, snapshot]);
 
-  // Animation loop: move the clock, draw the scene, refresh the UI snapshot.
+  // animation loop
   useEffect(() => {
     if (status !== 'ready' || !canvasRef.current) return undefined;
     const scene = createScene(canvasRef.current, { onStrike: () => audioRef.current?.thunder() });
@@ -100,12 +100,13 @@ export function usePond(canvasRef) {
         eng.pos += SPEEDS[eng.speed].hoursPerSec * dt;
         if (eng.pos > s.n - 1) eng.pos = 0;
       }
-      scene.draw(dt, readFrame(s, eng.pos, eng.norm));
+      const frame = readFrame(s, eng.pos, eng.norm); // read once, reuse below
+      scene.draw(dt, frame);
       if (now - lastUi > UI_REFRESH_MS) {
-        lastUi = now; snapshot();
-        // Keep the bubble attached to the clicked animal as it moves, with fresh readings.
+        lastUi = now; snapshot(frame);
+        // keep the bubble stuck to the animal as it swims
         const hit = scene.selectedHit();
-        if (hit) setInfo({ x: hit.x, y: hit.y, ...describe(hit, readFrame(s, eng.pos, eng.norm)) });
+        if (hit) setInfo({ x: hit.x, y: hit.y, ...describe(hit, frame) });
       }
       raf = requestAnimationFrame(loop);
     };
@@ -113,10 +114,11 @@ export function usePond(canvasRef) {
     return () => { cancelAnimationFrame(raf); scene.destroy(); };
   }, [status, canvasRef, eng, snapshot]);
 
-  // Keep the live feed fresh.
+  // refresh live data every 2 min (skip while the tab is hidden)
   useEffect(() => {
     if (mode !== 'live') return undefined;
     const id = setInterval(async () => {
+      if (document.hidden) return;
       const wasAtEnd = atEnd();
       try {
         const next = await fetchLive();
@@ -133,10 +135,10 @@ export function usePond(canvasRef) {
     if (!audioRef.current) {
       audioRef.current = createAudio(
         () => eng.series && readFrame(eng.series, eng.pos, eng.norm),
-        (note, vol) => eng.scene?.pulse(note, vol), // every piano note ripples the water
+        (note, vol) => eng.scene?.pulse(note, vol),
       );
     }
-    if (import.meta.env.DEV) window.__pondAudio = audioRef.current; // lets us measure loudness while developing
+    if (import.meta.env.DEV) window.__pondAudio = audioRef.current; // for checking volume in dev
     audioRef.current.setOn(on); setSoundState(on);
   }, [eng]);
 
@@ -147,11 +149,10 @@ export function usePond(canvasRef) {
     togglePlay: () => { setActiveEvent(null); setPlaying(!eng.playing); },
     cycleSpeed: () => { eng.speed = (eng.speed + 1) % SPEEDS.length; setSpeedState(eng.speed); },
     scrub: (fraction) => { setActiveEvent(null); eng.pos = clamp(fraction, 0, 1) * (eng.series.n - 1); snapshot(); },
-    // Jumping to a moment holds it on screen. Press Play to watch what happened next.
+    // jumping pauses on that moment, hit Play to see what happened next
     jumpTo: (pos, label) => { eng.speed = SPEEDS.length - 1; setSpeedState(eng.speed); goReplay(pos, false); setActiveEvent(label); },
     toggleLive: () => { setActiveEvent(null); return mode === 'live' ? goReplay() : goLive(); },
     toggleSound: () => setSound(!sound),
-    // Clicking an animal: find which one is under the pointer and let it explain itself.
     info,
     closeInfo: () => { eng.scene?.setSelected(null); setInfo(null); },
     isAnimalAt: (x, y) => Boolean(eng.scene?.hitTest(x, y)),
