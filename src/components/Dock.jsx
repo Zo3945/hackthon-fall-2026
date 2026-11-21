@@ -23,7 +23,7 @@ export default function Dock({ pond }) {
     <div className={open ? 'dock open' : 'dock'}>
       <div className="row">
         <button aria-pressed={mode === 'live'} onClick={pond.toggleLive}>
-          {connecting ? 'Connecting…' : mode === 'live' ? 'Live' : 'Live now'}
+          {connecting ? 'Connecting…' : mode === 'live' ? 'Live' : <><span className="long">Live now</span><span className="short">Live</span></>}
         </button>
         <button className="primary" aria-pressed={pond.playing} onClick={pond.togglePlay}>{pond.playing ? 'Pause' : 'Play'}</button>
         <input
